@@ -10,6 +10,8 @@
 #include <parquet/types.h>
 
 #include <unordered_map>
+#include <fstream>
+#include <cstring>
 
 namespace
 {
@@ -28,6 +30,60 @@ auto readParquetFile(const std::string &fname)
     PARQUET_THROW_NOT_OK(reader->ReadTable(&table));
 
     return std::move(table);
+}
+
+template<typename T>
+auto transformRawVectorToArrowTable(const std::vector<T> &data)
+{
+    std::cerr << "This should not be reachable" << std::endl;
+}
+
+template<>
+auto transformRawVectorToArrowTable<float>(const std::vector<float> &data)
+{
+    arrow::FloatBuilder builder;
+    PARQUET_THROW_NOT_OK(builder.AppendValues(data));
+    std::shared_ptr<arrow::Array> array;
+    PARQUET_THROW_NOT_OK(builder.Finish(&array));
+
+    std::shared_ptr<arrow::Schema> schema = arrow::schema(
+        {arrow::field("values", arrow::float32())});
+    
+    return arrow::Table::Make(schema, {array});
+}
+
+template<>
+auto transformRawVectorToArrowTable<double>(const std::vector<double> &data)
+{
+    arrow::DoubleBuilder builder;
+    PARQUET_THROW_NOT_OK(builder.AppendValues(data));
+    std::shared_ptr<arrow::Array> array;
+    PARQUET_THROW_NOT_OK(builder.Finish(&array));
+
+    std::shared_ptr<arrow::Schema> schema = arrow::schema(
+        {arrow::field("values", arrow::float64())});
+    
+    return arrow::Table::Make(schema, {array});
+}
+
+template<typename T>
+auto readBinaryFile(const std::string &fname)
+{
+    std::vector<T> data;
+    
+    std::ifstream input(fname, std::ifstream::in | std::ifstream::binary);
+
+    input.seekg(0, input.end);
+    size_t fileSize = input.tellg();
+    input.seekg(0, input.beg);
+
+    data.resize(fileSize / sizeof(T));
+
+    input.read(reinterpret_cast<char*>(data.data()), fileSize);
+
+    input.close();
+
+    return data;
 }
 
 // Prints information on how well each chunk is distributed to give an idea
@@ -140,10 +196,8 @@ void runTest(const std::string &fileName, const std::shared_ptr<arrow::Table> &t
        file_output_stream, table->num_rows(), props);
 }
 
-void runTest(const std::string &fname)
+void runTest(const std::string &fname, const std::shared_ptr<arrow::Table> &table)
 {
-    const auto table = readParquetFile(fname);
-
     // Generate uncompressed parquet file.
     runTest(fname, table, parquet::Compression::UNCOMPRESSED, false, false);
 
@@ -170,23 +224,106 @@ void runTest(const std::string &fname)
 
 void printHelp()
 {
-    std::cout << "Run as: parquet_test file1.parquet file2.parquet ... file_N.parquet" << std::endl;
+    std::cout << "Run as:" << std::endl;
+    std::cout << "parquet_test [OPTION] [FILE] ..." << std::endl;
+    std::cout << std::endl;
+    std::cout << "Possible options:" << std::endl;
+    std::cout << "\t" << "-p [FILE] ..." << std::endl;
+    std::cout << "\t\t" << "Reads each file as a parquet file and" << std::endl;
+    std::cout << "\t\t" << "iterates over a combination of BYTE_STREAM_SPLIT|DICTIONARY encoding" << std::endl;
+    std::cout << "\t\t" << "and a compression algorithm among GZIP, ZSTD, SNAPPY and LZ4." << std::endl;
+    std::cout << std::endl;
+    std::cout << "\t" << "-b [FILE] ..." << std::endl;
+    std::cout << "\t\t" << "Read a raw binary file of FP32 or FP64 values and performs the same" << std::endl;
+    std::cout << "\t\t" << "as with the -p option. The output is parquet files." << std::endl;
+    std::cout << "\t\t" << "For FP32, the file extension should be .sp." << std::endl;
+    std::cout << "\t\t" << "For FP64, the file extension should be .dp." << std::endl;
 }
+
+void handleInvalidArg()
+{
+    std::cout << "Invalid arguments" << std::endl;
+    printHelp();
+    exit(-1);
+}
+
+enum class Option
+{
+    None,
+    ReadParquetFile,
+    ReadBinaryFile
+};
 
 } // namespace
 
 int main(int argc, char *argv[]) {
-    if (argc == 1)
+    if (argc < 3)
     {
-        std::cout << "Please provide input file" << std::endl;
-        printHelp();
-        return -1;
+        handleInvalidArg();
     }
 
+    Option opt = Option::None;
     for (int i = 1; i < argc; ++i)
     {
-        const char *fileName = argv[i];
-        runTest(fileName);
+        const char *arg = argv[i];
+        if (arg[0] == '-')
+        {
+            if (strcmp(arg, "-p") == 0)
+            {
+                opt = Option::ReadParquetFile;
+            }
+            else if (strcmp(arg, "-b") == 0)
+            {
+                opt = Option::ReadBinaryFile;
+            }
+            else
+            {
+                handleInvalidArg();
+            }
+            continue;
+        }
+        const char *fileName = arg;
+        if (opt == Option::None)
+        {
+            handleInvalidArg();
+        }
+        else if (opt == Option::ReadParquetFile)
+        {
+            std::string fname(arg);
+            if (fname.length() < 8)
+            {
+                handleInvalidArg();
+            }
+            if (fname.compare(fname.length() - 8, 8, ".parquet") != 0)
+            {
+                std::cerr << "A parquet file should end with the \".parquet\" suffix." << std::endl;
+                return -1;
+            }
+            runTest(arg, readParquetFile(arg));
+        }
+        else if (opt == Option::ReadBinaryFile)
+        {
+            std::string fname(arg);
+            if (fname.length() < 3)
+            {
+                handleInvalidArg();
+            }
+            std::shared_ptr<arrow::Table> table = nullptr;
+            if (fname.compare(fname.length() - 3, 3, ".sp") == 0)
+            {
+                table = transformRawVectorToArrowTable(readBinaryFile<float>(fname));
+            }
+            else if (fname.compare(fname.length() - 3, 3, ".dp") == 0)
+            {
+                table = transformRawVectorToArrowTable(readBinaryFile<double>(fname));
+            }
+            else
+            {
+                std::cerr << "Invalid file name: " << fname << std::endl;
+                return -1;
+            }
+            runTest(fname, table);
+        }
     }
 
     return 0;
