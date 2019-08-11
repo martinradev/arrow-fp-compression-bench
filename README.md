@@ -23,7 +23,7 @@
 | GT62               | 2429                | 116       | 124                    | 129                           | 156       | 154                    | 173                           |
 
 
-### Compression speed ===
+### Compression speed
 | F32 dataset name | gzip (s) | dictionary + gzip (s) | byte_stream_split + gzip (s) | zstd (s) | dictionary + zstd (s) | byte_stream_split + zstd (s) |
 |------------------|----------|-----------------------|------------------------------|----------|-----------------------|------------------------------|
 | msg_bt           | 5.43     | 5.55                  | 5.06                         | 0.67     | 0.67                  | 1.72                         |
