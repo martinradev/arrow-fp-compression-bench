@@ -1,5 +1,5 @@
-=== Compression ratio ===
-Data with only one column. Data has high 0-order-entropy when the distribution is over the values (4 bytes).
+### Compression ratio
+#### Data with only one column. Data has high 0-order-entropy when the distribution is over the values (4 bytes).
 | F32 dataset name | no compression (MB) | gzip (MB) | dictionary + gzip (MB) | byte_stream_split + gzip (MB) | zstd (MB) | dictionary + zstd (MB) | byte_stream_split + zstd (MB) |
 |------------------|---------------------|-----------|------------------------|-------------------------------|-----------|------------------------|-------------------------------|
 | msg_bt           | 128                 | 108       | 109                    | 85                            | 112       | 113                    | 88                            |
@@ -15,7 +15,7 @@ Data with only one column. Data has high 0-order-entropy when the distribution i
 | obs_spitzer      | 95                  | 80        | 80                     | 80                            | 83        | 83                     | 81                            |
 | obs_temp         | 20                  | 18        | 19                     | 17                            | 18        | 19                     | 17                            |
 
-Multiple columns but data is extremely repetitive.
+#### Multiple columns but data is extremely repetitive.
 | Mixed dataset name | no compression (MB) | gzip (MB) | dictionary + gzip (MB) | byte_stream_split + gzip (MB) | zstd (MB) | dictionary + zstd (MB) | byte_stream_split + zstd (MB) |
 |--------------------|---------------------|-----------|------------------------|-------------------------------|-----------|------------------------|-------------------------------|
 | Can_01_SPEC        | 3300                | 1545      | 1131                   | 1788                          | 1741      | 1135                   | 1905                          |
@@ -23,7 +23,7 @@ Multiple columns but data is extremely repetitive.
 | GT62               | 2429                | 116       | 124                    | 129                           | 156       | 154                    | 173                           |
 
 
-=== Compression speed ===
+### Compression speed ===
 | F32 dataset name | gzip (s) | dictionary + gzip (s) | byte_stream_split + gzip (s) | zstd (s) | dictionary + zstd (s) | byte_stream_split + zstd (s) |
 |------------------|----------|-----------------------|------------------------------|----------|-----------------------|------------------------------|
 | msg_bt           | 5.43     | 5.55                  | 5.06                         | 0.67     | 0.67                  | 1.72                         |
@@ -39,7 +39,6 @@ Multiple columns but data is extremely repetitive.
 | obs_spitzer      | 6.38     | 6.35                  | 6.61                         | 0.49     | 0.52                  | 1.31                         |
 | obs_temp         | 0.80     | 0.84                  | 1.10                         | 0.07     | 0.09                  | 0.28                         |
 
-Speed:
 | Mixed dataset name | gzip (s) | dictionary + gzip (s) | byte_stream_split + gzip (s) | zstd (s) | dictionary + zstd (s) | byte_stream_split + zstd (s) |
 |--------------------|----------|-----------------------|------------------------------|----------|-----------------------|------------------------------|
 | Can_01_SPEC        | 374.48   | 60.29                 | 340.57                       | 28.91    | 18.04                 | 107.00                       |
