@@ -229,14 +229,14 @@ void printHelp()
     std::cout << "parquet_test [OPTION] ..." << std::endl;
     std::cout << std::endl;
     std::cout << "Possible options:" << std::endl;
-    std::cout << " " << "-p [FILE]" << std::endl;
+    std::cout << " " << "-p [FILE] ..." << std::endl;
     std::cout << "  " << "Reads the specifial file as a parquet file." << std::endl;
     std::cout << std::endl;
-    std::cout << " " << "-b [FILE]" << std::endl;
+    std::cout << " " << "-b [FILE] ..." << std::endl;
     std::cout << "  " << "Read a raw binary file of FP32 or FP64 values." << std::endl;
     std::cout << "  " << "For FP32, the file extension should be .sp." << std::endl;
     std::cout << "  " << "For FP64, the file extension should be .dp." << std::endl;
-    std::cout << " " << "-c [CODEC],[ENCODING],[COMPRESSION_LEVEL]" << std::endl;
+    std::cout << " " << "-c [CODEC],[ENCODING],[COMPRESSION_LEVEL] ..." << std::endl;
     std::cout << "  " << "CODEC must be one of the following:" << std::endl;
     std::cout << "   " << "zstd, gzip, snappy, lz4, uncompressed" << std::endl;
     std::cout << "  " << "ENCODING must be one of the following:" << std::endl;
@@ -317,6 +317,19 @@ struct TestParameters
     int32_t compressionLevel;
 };
 
+enum class FileType
+{
+    RawFloatFile,
+    RawDoubleFile,
+    ParquetFile
+};
+
+struct TestFile
+{
+    FileType type;
+    std::string fileName;
+};
+
 } // namespace
 
 int main(int argc, char *argv[]) {
@@ -326,8 +339,7 @@ int main(int argc, char *argv[]) {
     }
 
     std::vector<TestParameters> testJobs;
-    const char *fileName = nullptr;
-    std::shared_ptr<arrow::Table> table;
+    std::vector<TestFile> files;
     for (int i = 1; i < argc; ++i)
     {
         const char *arg = argv[i];
@@ -335,44 +347,51 @@ int main(int argc, char *argv[]) {
         {
             if (strcmp(arg, "-p") == 0)
             {
-                ++i;
-                arg = argv[i];
-                std::string fname(arg);
-                if (fname.length() < 8)
+                int j;
+                for (j = i + 1; j < argc; ++j)
                 {
-                    handleInvalidArg();
+                    arg = argv[j];
+                    std::string fname(arg);
+                    if (fname.length() <= 8)
+                    {
+                        break;
+                    }
+                    if (fname.compare(fname.length() - 8, 8, ".parquet") == 0)
+                    {
+                        files.push_back({FileType::ParquetFile, fname});
+                    }
+                    else
+                    {
+                        break;
+                    }
                 }
-                if (fname.compare(fname.length() - 8, 8, ".parquet") != 0)
-                {
-                    std::cerr << "A parquet file should end with the \".parquet\" suffix." << std::endl;
-                    return -1;
-                }
-                table = readParquetFile(arg);
-                fileName = arg;
+                i = j - 1;
             }
             else if (strcmp(arg, "-b") == 0)
             {
-                ++i;
-                arg = argv[i];
-                std::string fname(arg);
-                if (fname.length() < 3)
+                int j;
+                for (j = i + 1; j < argc; ++j)
                 {
-                    handleInvalidArg();
+                    arg = argv[j];
+                    std::string fname(arg);
+                    if (fname.length() <= 3)
+                    {
+                        break;
+                    }
+                    if (fname.compare(fname.length() - 3, 3, ".sp") == 0)
+                    {
+                        files.push_back({FileType::RawFloatFile, fname});
+                    }
+                    else if (fname.compare(fname.length() - 3, 3, ".dp") == 0)
+                    {
+                        files.push_back({FileType::RawDoubleFile, fname});
+                    }
+                    else
+                    {
+                        break;
+                    }
                 }
-                if (fname.compare(fname.length() - 3, 3, ".sp") == 0)
-                {
-                    table = transformRawVectorToArrowTable(readBinaryFile<float>(fname));
-                }
-                else if (fname.compare(fname.length() - 3, 3, ".dp") == 0)
-                {
-                    table = transformRawVectorToArrowTable(readBinaryFile<double>(fname));
-                }
-                else
-                {
-                    std::cerr << "Invalid file name: " << fname << std::endl;
-                    return -1;
-                }
-                fileName = arg;
+                i = j - 1;
             }
             else if (strcmp(arg, "-c") == 0)
             {
@@ -419,9 +438,26 @@ int main(int argc, char *argv[]) {
             handleInvalidArg();
         }
     }
-    for (const auto job : testJobs)
+    for (const auto &file : files)
     {
-        runTest(fileName, table, job.compression, job.encoding, job.compressionLevel, 2U);
+        std::shared_ptr<arrow::Table> table;
+        const auto &fileName = file.fileName;
+        switch(file.type)
+        {
+            case FileType::ParquetFile:
+                table = readParquetFile(fileName);
+                break;
+            case FileType::RawFloatFile:
+                table = transformRawVectorToArrowTable(readBinaryFile<float>(fileName));
+                break;
+            case FileType::RawDoubleFile:
+                table = transformRawVectorToArrowTable(readBinaryFile<double>(fileName));
+                break;
+        }
+        for (const auto &job : testJobs)
+        {
+            runTest(fileName, table, job.compression, job.encoding, job.compressionLevel, 2U);
+        }
     }
 
     return 0;
