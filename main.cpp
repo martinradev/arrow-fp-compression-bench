@@ -12,9 +12,18 @@
 #include <unordered_map>
 #include <fstream>
 #include <cstring>
+#include <sys/time.h>
 
 namespace
 {
+
+inline double gettime() {
+    struct timespec ts = {0};
+    int err = clock_gettime(CLOCK_MONOTONIC, &ts);
+    (void)err;
+    return (double)ts.tv_sec + (double)ts.tv_nsec / 1000000000.0;
+}
+
 
 // Reads a parquet file and returns an arrow::Table object.
 auto readParquetFile(const std::string &fname)
@@ -88,6 +97,7 @@ auto readBinaryFile(const std::string &fname)
 
 // Prints information on how well each chunk is distributed to give an idea
 // on how repetitive the data is.
+#if 0
 void getStatistics(const std::string &fname)
 {
     auto table = readParquetFile(fname);
@@ -139,32 +149,38 @@ void getStatistics(const std::string &fname)
         }
     }
 }
+#endif
 
 // Saves the table using the specified compression algorithm, FP encoding and dictionary encoding.
-void runTest(const std::string &fileName, const std::shared_ptr<arrow::Table> &table, parquet::Compression::type compression, bool useFP, bool useDictionary)
+void runTest(const std::string &fileName,
+             const std::shared_ptr<arrow::Table> &table,
+             parquet::Compression::type compression,
+             parquet::Encoding::type encodingType,
+             int32_t compressionLevel,
+             size_t numRuns)
 {
     std::string encoding;
-    if (useFP)
+    switch(encodingType)
     {
-        encoding += "fp";
-    }
-    else if (useDictionary)
-    {
-        encoding += "dict";
-    }
-    else if (!useFP && !useDictionary)
-    {
-        encoding += "no_enc";
-    }
-    else
-    {
-        std::cerr << "We cannot have both dictionary and fp" << std::endl;
-        exit(-1);
+        case parquet::Encoding::type::BYTE_STREAM_SPLIT:
+            encoding += "fp";
+            break;
+        case parquet::Encoding::type::RLE_DICTIONARY:
+            encoding += "dict";
+            break;
+        case parquet::Encoding::type::PLAIN:
+            encoding += "no_enc";
+            break;
+        default:
+            std::cerr << "We cannot have both dictionary and fp" << std::endl;
+            exit(-1);
     }
     std::string newName = fileName + "." + parquet::CompressionToString(compression) + "." + encoding;
+    if (compressionLevel != -1)
+    {
+        newName += "." + std::to_string(compressionLevel);
+    }
 
-    std::shared_ptr<arrow::io::FileOutputStream> file_output_stream;
-    arrow::io::FileOutputStream::Open(newName, &file_output_stream);
     parquet::WriterProperties::Builder props_builder;
 
     const auto &schema = table->schema();
@@ -175,69 +191,68 @@ void runTest(const std::string &fileName, const std::shared_ptr<arrow::Table> &t
         if (arrow::is_floating(field->type()->id()))
         {
             // We cannot have both byte_stream_split and dictionary encoding.
-            if (useFP)
-            {
-                props_builder.encoding(field->name(), parquet::Encoding::type::BYTE_STREAM_SPLIT);
-            }
-            if (useDictionary)
+            if (encodingType == parquet::Encoding::type::RLE_DICTIONARY)
             {
                 props_builder.enable_dictionary(field->name());
             }
             else
             {
                 props_builder.disable_dictionary(field->name());
+                props_builder.encoding(field->name(), encodingType);
+            }
+            if (compressionLevel != -1)
+            {
+                props_builder.compression_level(compressionLevel);
             }
         }
     }
     props_builder.compression(compression);
     
     auto props = props_builder.build();
-    parquet::arrow::WriteTable(*table, ::arrow::default_memory_pool(),
-       file_output_stream, table->num_rows(), props);
-}
-
-void runTest(const std::string &fname, const std::shared_ptr<arrow::Table> &table)
-{
-    // Generate uncompressed parquet file.
-    runTest(fname, table, parquet::Compression::UNCOMPRESSED, false, false);
-
-    // Use GZIP.
-    runTest(fname, table, parquet::Compression::GZIP, false, false);
-    runTest(fname, table, parquet::Compression::GZIP, true, false);
-    runTest(fname, table, parquet::Compression::GZIP, false, true);
-
-    // Use ZSTD.
-    runTest(fname, table, parquet::Compression::ZSTD, false, false);
-    runTest(fname, table, parquet::Compression::ZSTD, true, false);
-    runTest(fname, table, parquet::Compression::ZSTD, false, true);
-
-    // Use SNAPPY.
-    runTest(fname, table, parquet::Compression::SNAPPY, false, false);
-    runTest(fname, table, parquet::Compression::SNAPPY, true, false);
-    runTest(fname, table, parquet::Compression::SNAPPY, false, true);
-
-    // Use LZ4.
-    runTest(fname, table, parquet::Compression::LZ4, false, false);
-    runTest(fname, table, parquet::Compression::LZ4, true, false);
-    runTest(fname, table, parquet::Compression::LZ4, false, true);
+    double totalTime = .0;
+    for (size_t i = 0; i < numRuns; ++i)
+    {
+        std::shared_ptr<arrow::io::FileOutputStream> file_output_stream;
+        arrow::io::FileOutputStream::Open(newName, &file_output_stream);
+        double t1 = gettime();
+        parquet::arrow::WriteTable(*table, ::arrow::default_memory_pool(),
+           file_output_stream, table->num_rows(), props);
+        double t2 = gettime();
+        totalTime += (t2-t1);
+    }
+    std::cout << newName << ": " << (totalTime / numRuns) << std::endl;
 }
 
 void printHelp()
 {
     std::cout << "Run as:" << std::endl;
-    std::cout << "parquet_test [OPTION] [FILE] ..." << std::endl;
+    std::cout << "parquet_test [OPTION] ..." << std::endl;
     std::cout << std::endl;
     std::cout << "Possible options:" << std::endl;
-    std::cout << "\t" << "-p [FILE] ..." << std::endl;
-    std::cout << "\t\t" << "Reads each file as a parquet file and" << std::endl;
-    std::cout << "\t\t" << "iterates over a combination of BYTE_STREAM_SPLIT|DICTIONARY encoding" << std::endl;
-    std::cout << "\t\t" << "and a compression algorithm among GZIP, ZSTD, SNAPPY and LZ4." << std::endl;
+    std::cout << " " << "-p [FILE]" << std::endl;
+    std::cout << "  " << "Reads the specifial file as a parquet file." << std::endl;
     std::cout << std::endl;
-    std::cout << "\t" << "-b [FILE] ..." << std::endl;
-    std::cout << "\t\t" << "Read a raw binary file of FP32 or FP64 values and performs the same" << std::endl;
-    std::cout << "\t\t" << "as with the -p option. The output is parquet files." << std::endl;
-    std::cout << "\t\t" << "For FP32, the file extension should be .sp." << std::endl;
-    std::cout << "\t\t" << "For FP64, the file extension should be .dp." << std::endl;
+    std::cout << " " << "-b [FILE]" << std::endl;
+    std::cout << "  " << "Read a raw binary file of FP32 or FP64 values." << std::endl;
+    std::cout << "  " << "For FP32, the file extension should be .sp." << std::endl;
+    std::cout << "  " << "For FP64, the file extension should be .dp." << std::endl;
+    std::cout << " " << "-c [CODEC],[ENCODING],[COMPRESSION_LEVEL]" << std::endl;
+    std::cout << "  " << "CODEC must be one of the following:" << std::endl;
+    std::cout << "   " << "zstd, gzip, snappy, lz4, uncompressed" << std::endl;
+    std::cout << "  " << "ENCODING must be one of the following:" << std::endl;
+    std::cout << "   " << "plain, dictionary, split" << std::endl;
+    std::cout << "  " << "COMPRESSION_LEVEL depends on the codec being used." << std::endl;
+    std::cout << "  " << "Pass -1 if you want to use the default compression level." << std::endl;
+    std::cout << std::endl;
+    std::cout << "Example runs:" << std::endl;
+    std::cout << "  " << "parquet_test -p file.parquet -c zstd,plain,6 gzip,dictionary,-1" << std::endl;
+    std::cout << "   " << "Reads file.parquet. It first tries to create a new parquet file" << std::endl;
+    std::cout << "   " << "for which each FP column uses ZSTD as a codec with compression level 6" << std::endl;
+    std::cout << "   " << "and plain encoding." << std::endl;
+    std::cout << "  " << "parquet_test -b mydata.sp -c snappy,split,-1" << std::endl;
+    std::cout << "   " << "Reads the binary file consisting of F32 values and generates a parquet file" << std::endl;
+    std::cout << "   " << "using snappy as a codec with BYTE_STREAM_SPLIT encoding. The compression level" << std::endl;
+    std::cout << "   " << "is the default on." << std::endl;
 }
 
 void handleInvalidArg()
@@ -247,11 +262,59 @@ void handleInvalidArg()
     exit(-1);
 }
 
-enum class Option
+parquet::Compression::type GetCompressionTypeFromString(const char *compressionName)
 {
-    None,
-    ReadParquetFile,
-    ReadBinaryFile
+    if (strcmp(compressionName, "gzip") == 0)
+    {
+        return parquet::Compression::GZIP;
+    }
+    else if (strcmp(compressionName, "zstd") == 0)
+    {
+        return parquet::Compression::ZSTD;
+    }
+    else if (strcmp(compressionName, "snappy") == 0)
+    {
+        return parquet::Compression::SNAPPY;
+    }
+    else if (strcmp(compressionName, "lz4") == 0)
+    {
+        return parquet::Compression::LZ4;
+    }
+    else if (strcmp(compressionName, "uncompressed") == 0)
+    {
+        return parquet::Compression::UNCOMPRESSED;
+    }
+    else
+    {
+        handleInvalidArg();
+    }
+}
+
+parquet::Encoding::type GetEncodingTypeFromString(const char *encodingName)
+{
+    if (strcmp(encodingName, "plain") == 0)
+    {
+        return parquet::Encoding::type::PLAIN;
+    }
+    else if (strcmp(encodingName, "dictionary") == 0)
+    {
+        return parquet::Encoding::type::RLE_DICTIONARY;
+    }
+    else if (strcmp(encodingName, "split") == 0)
+    {
+        return parquet::Encoding::type::BYTE_STREAM_SPLIT;
+    }
+    else
+    {
+        handleInvalidArg();
+    }
+}
+
+struct TestParameters
+{
+    parquet::Compression::type compression;
+    parquet::Encoding::type encoding;
+    int32_t compressionLevel;
 };
 
 } // namespace
@@ -262,7 +325,9 @@ int main(int argc, char *argv[]) {
         handleInvalidArg();
     }
 
-    Option opt = Option::None;
+    std::vector<TestParameters> testJobs;
+    const char *fileName = nullptr;
+    std::shared_ptr<arrow::Table> table;
     for (int i = 1; i < argc; ++i)
     {
         const char *arg = argv[i];
@@ -270,60 +335,93 @@ int main(int argc, char *argv[]) {
         {
             if (strcmp(arg, "-p") == 0)
             {
-                opt = Option::ReadParquetFile;
+                ++i;
+                arg = argv[i];
+                std::string fname(arg);
+                if (fname.length() < 8)
+                {
+                    handleInvalidArg();
+                }
+                if (fname.compare(fname.length() - 8, 8, ".parquet") != 0)
+                {
+                    std::cerr << "A parquet file should end with the \".parquet\" suffix." << std::endl;
+                    return -1;
+                }
+                table = readParquetFile(arg);
+                fileName = arg;
             }
             else if (strcmp(arg, "-b") == 0)
             {
-                opt = Option::ReadBinaryFile;
+                ++i;
+                arg = argv[i];
+                std::string fname(arg);
+                if (fname.length() < 3)
+                {
+                    handleInvalidArg();
+                }
+                if (fname.compare(fname.length() - 3, 3, ".sp") == 0)
+                {
+                    table = transformRawVectorToArrowTable(readBinaryFile<float>(fname));
+                }
+                else if (fname.compare(fname.length() - 3, 3, ".dp") == 0)
+                {
+                    table = transformRawVectorToArrowTable(readBinaryFile<double>(fname));
+                }
+                else
+                {
+                    std::cerr << "Invalid file name: " << fname << std::endl;
+                    return -1;
+                }
+                fileName = arg;
+            }
+            else if (strcmp(arg, "-c") == 0)
+            {
+                int j;
+                for (j = i + 1; j < argc; ++j)
+                {
+                    if (argv[j][0] != '-')
+                    {
+                        char *combination = argv[j];
+                        char *splitBorder = strstr(combination, ",");
+                        if (splitBorder == nullptr)
+                        {
+                            handleInvalidArg();
+                        }
+                        splitBorder[0] = '\0';
+                        char *compression = combination;
+                        char *encoding = splitBorder + 1;
+                        splitBorder = strstr(encoding, ",");
+                        if (splitBorder == nullptr)
+                        {
+                            handleInvalidArg();
+                        }
+                        splitBorder[0] = '\0';
+                        const int32_t compressionLevel = atoi(splitBorder+1);
+                        const auto compressionType = GetCompressionTypeFromString(compression);
+                        const auto encodingType = GetEncodingTypeFromString(encoding);
+                        TestParameters job =
+                        {
+                            compressionType,
+                            encodingType,
+                            compressionLevel
+                        };
+                        testJobs.push_back(job);
+                    }
+                }
+                i = j - 1;
             }
             else
             {
                 handleInvalidArg();
             }
             continue;
-        }
-        const char *fileName = arg;
-        if (opt == Option::None)
-        {
+        } else {
             handleInvalidArg();
         }
-        else if (opt == Option::ReadParquetFile)
-        {
-            std::string fname(arg);
-            if (fname.length() < 8)
-            {
-                handleInvalidArg();
-            }
-            if (fname.compare(fname.length() - 8, 8, ".parquet") != 0)
-            {
-                std::cerr << "A parquet file should end with the \".parquet\" suffix." << std::endl;
-                return -1;
-            }
-            runTest(arg, readParquetFile(arg));
-        }
-        else if (opt == Option::ReadBinaryFile)
-        {
-            std::string fname(arg);
-            if (fname.length() < 3)
-            {
-                handleInvalidArg();
-            }
-            std::shared_ptr<arrow::Table> table = nullptr;
-            if (fname.compare(fname.length() - 3, 3, ".sp") == 0)
-            {
-                table = transformRawVectorToArrowTable(readBinaryFile<float>(fname));
-            }
-            else if (fname.compare(fname.length() - 3, 3, ".dp") == 0)
-            {
-                table = transformRawVectorToArrowTable(readBinaryFile<double>(fname));
-            }
-            else
-            {
-                std::cerr << "Invalid file name: " << fname << std::endl;
-                return -1;
-            }
-            runTest(fname, table);
-        }
+    }
+    for (const auto job : testJobs)
+    {
+        runTest(fileName, table, job.compression, job.encoding, job.compressionLevel, 2U);
     }
 
     return 0;
