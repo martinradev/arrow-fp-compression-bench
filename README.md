@@ -1,6 +1,6 @@
 # ARROW's default compression level
-### Compression ratio
-#### Data with only one column. Data has high 0-order-entropy when the distribution is over the values (4 bytes).
+## Compression ratio
+### Data with only one column. Data has high 0-order-entropy when the distribution is over the values (4 bytes).
 | Combination \ F32 data            | msg_bt | msg_lu | msg_sp | msg_sweep3d | num_brain | num_comet | num_control | num_plasma | obs_error | obs_info | obs_spitzer | obs_temp |
 |-----------------------------------|--------|--------|--------|-------------|-----------|-----------|-------------|------------|-----------|----------|-------------|----------|
 | no compression                    | 128    | 93     | 139    | 60          | 68        | 52        | 77          | 17         | 30        | 10       | 95          | 20       |
@@ -13,8 +13,7 @@
 | byte_stream_split + zstd          | 84     | 67     | 88     | 13          | 49        | 38        | 63          | 1          | 21        | 7        | 72          | 16       |
 | adaptive byte_stream_split + zstd | 88     | 70     | 92     | 13          | 51        | 39        | 68          | 1          | 20        | 7        | 81          | 17       |
 
-
-#### Multiple columns but data is extremely repetitive.
+### Multiple columns but data is extremely repetitive.
 | Combination \ mixed data          | Can_01_SPEC | GT61 | GT62 |
 |-----------------------------------|-------------|------|------|
 | no compression                    | 3300        | 2414 | 2429 |
@@ -27,7 +26,11 @@
 | byte_stream_split + zstd          | 1581        | 222  | 221  |
 | adaptive byte_stream_split + zstd | 1985        | 173  | 173  |
 
-### Compression speed
+We can see that the *byte_stream_split encoding* improves the compression ratio for the majority of test cases.
+The *adaptive byte_stream_split encoding* is only useful for whenever the data is very repetitive as is the case for the GT61 and GT62 tests. For all other cases, the encoding is not competitive due to the overhead from storing block types, encoding at the block level and less than ideal heuristic.
+The *dictionary encoding* only produces good results for the Can_01_SPEC, GT61, GT62 and num_plasma which are tests with very repetitive data. For all other is typically worse than the *plain encoding*.
+
+## Compression speed
 | Combination \ F32 data            | msg_bt | msg_lu | msg_sp | msg_sweep3d | num_brain | num_comet | num_control | num_plasma | obs_error | obs_info | obs_spitzer | obs_temp |
 |-----------------------------------|--------|--------|--------|-------------|-----------|-----------|-------------|------------|-----------|----------|-------------|----------|
 | gzip                              | 5.43   | 3.84   | 8.18   | 2.55        | 3.16      | 1.83      | 3.04        | 0.57       | 1.42      | 0.35     | 6.38        | 0.80     |
@@ -50,8 +53,12 @@
 | byte_stream_split + zstd          | 55.48       | 9.99  | 9.64  |
 | adaptive byte_stream_split + zstd | 107.00      | 12.73 | 12.77 |
 
+Using the *adaptive byte_stream_split encoding* typically leads to slower creation of parquet files. The is expected because the type heuristic has to read the whole block and approximate the most occurring elements. The improvement in compression ratio over the dictionary encoding and plain encoding is not high enough for the majority of tests so that the reduction in IO-usage can lead to a better performance. The adaptive encoding still produces better results for when GZIP is used. A reason could be that the transformed input is faster to parse in GZIP than for the plain or dictionary-produced input.
+Using *byte_stream_encoding* with GZIP also leads to faster creation of parquet files. When ZSTD is used, there seems to be almost no performance difference between this encoding, plain and dictionary encoding. A reason could be that the time for apply the encoding and time for writing out the file to disk somehow even out.
+*Dictionary encoding* achieves significantly better performance for highly repetitive data like Can_01_Spec, GT61 and GT62. The reason is that the compressed file size is smaller and less time is spent on IO.
+
 # Different compression levels for ZSTD
-### Compression ratio
+## Compression ratio
 | Data         | Level | zstd (MB) | dictionary + zstd (MB) | byte_stream_splt + zstd (MB) | adaptive byte_stream_split + zstd (MB) |
 |--------------|-------|-----------|------------------------|------------------------------|----------------------------------------|
 | msg_bt       |       |           |                        |                              |                                        |
