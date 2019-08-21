@@ -109,6 +109,8 @@ This relative scatter plot includes all of the collected results for compression
 
 Very high compression ratio is achieved for the GT61 and GT62 samples regardless of the encoding and compression algorithm. Plain encoding and zstd seems to be a good candidate because it achieves great compression ratio and is faster than any other combination.
 
+For Can_01_SPEC the best combination is *dictionary + zstd*.
+
 For almost any other case, the *BYTE_STREAM_SPLIT + zstd* combination tends to perform better in both compression ratio and speed.
 
 
