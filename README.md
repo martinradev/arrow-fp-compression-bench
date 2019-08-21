@@ -174,3 +174,5 @@ Measurements are in *megabytes*.
 |              | 4     | 145       | 132                    | 205                          | 150                                    |
 |              | 7     | 123       | 122                    | 184                          | 128                                    |
 |              | 10    | 122       | 121                    | 181                          | 127                                    |
+
+Note that there is a small discrepancy between ZSTD with level 1 and the tables from before for the ADAPTIVE_STREAM_SPLIT_ENCODING. The small difference in compression ratio is due to tweaks in the heuristic midway generating the data for the tables. Because it takes some time to re-generate the tables, I decided to leave it as it is because the difference is very small.
