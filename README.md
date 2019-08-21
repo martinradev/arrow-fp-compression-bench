@@ -40,6 +40,8 @@ Measurements are in *megabytes*.
 | byte_stream_split + zstd          | 84     | 67     | 88     | 13          | 49        | 38        | 63          | 1          | 21        | 7        | 72          | 16       |
 | adaptive byte_stream_split + zstd | 88     | 70     | 92     | 13          | 51        | 39        | 68          | 1          | 20        | 7        | 81          | 17       |
 
+![](plot_data/Figure_1.png)
+
 ### Multiple columns but data is extremely repetitive.
 | Combination \ mixed data          | Can_01_SPEC | GT61 | GT62 |
 |-----------------------------------|-------------|------|------|
@@ -52,6 +54,8 @@ Measurements are in *megabytes*.
 | dictionary + zstd                 | 1135        | 156  | 154  |
 | byte_stream_split + zstd          | 1581        | 222  | 221  |
 | adaptive byte_stream_split + zstd | 1985        | 173  | 173  |
+
+![](plot_data/Figure_2.png)
 
 We can see that the *byte_stream_split encoding* improves the compression ratio for the majority of test cases.
 
@@ -75,6 +79,8 @@ Measurements are in *seconds*.
 | byte_stream_split + zstd          | 0.70   | 0.36   | 0.60   | 0.18        | 0.29      | 0.27      | 0.35        | 0.04       | 0.14      | 0.04     | 0.59        | 0.09     |
 | adaptive byte_stream_split + zstd | 1.72   | 1.23   | 1.89   | 0.66        | 0.88      | 0.68      | 1.09        | 0.18       | 0.40      | 0.11     | 1.31        | 0.28     |
 
+![](plot_data/Figure_3.png)
+
 | Combination \ mixed data          | Can_01_SPEC | GT61  | GT62  |
 |-----------------------------------|-------------|-------|-------|
 | gzip                              | 374.48      | 39.12 | 40.26 |
@@ -85,6 +91,8 @@ Measurements are in *seconds*.
 | dictionary + zstd                 | 18.04       | 9.25  | 10.13 |
 | byte_stream_split + zstd          | 55.48       | 9.99  | 9.64  |
 | adaptive byte_stream_split + zstd | 107.00      | 12.73 | 12.77 |
+
+![](plot_data/Figure_4.png)
 
 Using the *adaptive byte_stream_split encoding* typically leads to slower creation of parquet files. The is expected because the type heuristic has to read the whole block and approximate the most occurring elements. The improvement in compression ratio over the dictionary encoding and plain encoding is not high enough for the majority of tests so that the reduction in IO-usage can lead to a better performance. The adaptive encoding still produces better results for when GZIP is used. A reason could be that the transformed input is faster to parse in GZIP than for the plain or dictionary-produced input.
 
