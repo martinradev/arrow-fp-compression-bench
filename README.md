@@ -103,6 +103,13 @@ Using *byte_stream_encoding* with GZIP also leads to faster creation of parquet 
 *Dictionary encoding* achieves significantly better performance for highly repetitive data like Can_01_Spec, GT61 and GT62. The reason is that the compressed file size is smaller and less time is spent on IO.
 
 
+![](plot_data/Figure_5.png)
+
+This relative scatter plot includes all of the collected results for compression ratio and speed. The different symbol markers correspond to the encoding-compression algorithm combination and the color corresponds to a sample in the test data. For each color, markers located to the left, bottom or left-bottom are of interest.
+Very high compression ratio is achieved for the GT61 and GT62 samples regardless of the encoding and compression algorithm. Plain encoding and zstd seems to be a good candidate because it achieves great compression ratio and is faster than any other combination.
+For almost any other case, the *BYTE_STREAM_SPLIT + zstd* combination tends to perform better in both compression ratio and speed.
+
+
 # Different compression levels for ZSTD
 ## Compression ratio
 Measurements are in *megabytes*.
