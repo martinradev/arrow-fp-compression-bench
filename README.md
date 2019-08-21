@@ -27,6 +27,7 @@ A possible heuristic can be seen in my Arrow fork patches. It is based on this i
 ## Compression ratio
 ### Data with only one column. Data has high 0-order-entropy when the distribution is over the values (4 bytes).
 Measurements are in *megabytes*.
+
 | Combination \ F32 data            | msg_bt | msg_lu | msg_sp | msg_sweep3d | num_brain | num_comet | num_control | num_plasma | obs_error | obs_info | obs_spitzer | obs_temp |
 |-----------------------------------|--------|--------|--------|-------------|-----------|-----------|-------------|------------|-----------|----------|-------------|----------|
 | no compression                    | 128    | 93     | 139    | 60          | 68        | 52        | 77          | 17         | 30        | 10       | 95          | 20       |
@@ -62,6 +63,7 @@ The *dictionary encoding* only produces good results for the Can_01_SPEC, GT61, 
 
 ## Compression speed
 Measurements are in *seconds*.
+
 | Combination \ F32 data            | msg_bt | msg_lu | msg_sp | msg_sweep3d | num_brain | num_comet | num_control | num_plasma | obs_error | obs_info | obs_spitzer | obs_temp |
 |-----------------------------------|--------|--------|--------|-------------|-----------|-----------|-------------|------------|-----------|----------|-------------|----------|
 | gzip                              | 5.43   | 3.84   | 8.18   | 2.55        | 3.16      | 1.83      | 3.04        | 0.57       | 1.42      | 0.35     | 6.38        | 0.80     |
@@ -96,6 +98,7 @@ Using *byte_stream_encoding* with GZIP also leads to faster creation of parquet 
 # Different compression levels for ZSTD
 ## Compression ratio
 Measurements are in *megabytes*.
+
 | Data         | Level | zstd (MB) | dictionary + zstd (MB) | byte_stream_splt + zstd (MB) | adaptive byte_stream_split + zstd (MB) |
 |--------------|-------|-----------|------------------------|------------------------------|----------------------------------------|
 | msg_bt       |       |           |                        |                              |                                        |
