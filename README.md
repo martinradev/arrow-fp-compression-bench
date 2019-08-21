@@ -102,6 +102,7 @@ Using *byte_stream_encoding* with GZIP also leads to faster creation of parquet 
 
 *Dictionary encoding* achieves significantly better performance for highly repetitive data like Can_01_Spec, GT61 and GT62. The reason is that the compressed file size is smaller and less time is spent on IO.
 
+## Combined scatter plot
 
 ![](plot_data/Figure_5.png)
 
