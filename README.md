@@ -25,8 +25,8 @@ A possible heuristic can be seen in my Arrow fork patches. It is based on this i
 
 # ARROW's default compression level
 ## Compression ratio
-### Data with only one column. Data has high 0-order-entropy when the distribution is over the values (4 bytes).
 Measurements are in *megabytes*.
+### Data with only one column. Data has high 0-order-entropy when the distribution is over the values (4 bytes).
 
 | Combination \ F32 data            | msg_bt | msg_lu | msg_sp | msg_sweep3d | num_brain | num_comet | num_control | num_plasma | obs_error | obs_info | obs_spitzer | obs_temp |
 |-----------------------------------|--------|--------|--------|-------------|-----------|-----------|-------------|------------|-----------|----------|-------------|----------|
