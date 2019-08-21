@@ -1,6 +1,32 @@
+# What this is all about
+This project includes a benchmark for evaluating the achieved comperession ratio and speed of different configurations of Apache Parquet and Apache Arrow.
+The tables below include metrics for the following configurations:
+* PLAIN encoding, UNCOMPRESSED
+* PLAIN encoding, GZIP
+* PLAIN encoding, ZSTD
+* DICTIONARY encoding, GZIP
+* DICTIONARY encoding, ZSTD
+* BYTE_STREAM_SPLIT encoding, GZIP
+* BYTE_STREAM_SPLIT encoding, ZSTD
+* ADAPTIVE_BYTE_STREAM_SPLIT encoding, GZIP
+* ADAPTIVE_BYTE_STREAM_SPLIT encoding, ZSTD
+
+The *BYTE_STREAM_SPLIT* and *ADAPTIVE_BYTE_STREAM_SPLIT* encodings are new, designed by me and not yet part of the Apache Parquet project.
+For the not-production-level C++ implementation of both, you can check my fork of Apache Arrow: https://github.com/martinradev/arrow.
+
+The *BYTE_STREAM_SPLIT* encoding takes values in an array and scatters each byte of a value to different streams.
+There are four streams for 32-bit floating-point values and eight streams for 64-bit floating-point values.
+After the bytes of all values are scatter, the streams are concatenated.
+Note that this encoding does not reduce the size of the array but makes it potentially more compressible. Thus, it is important to use a compression algorithm.
+
+The *ADAPTIVE_BYTE_STREAM_SPLIT* encoding attempts to improve results of *BYTE_STREAM_SPLIT* encoding for cases when data in the array is very repetitive and a combination of PLAIN encoding and a compression algorithm achieve better results.
+This encoding divides the array into blocks of K values. For each block it uses are heuristic to determine whether using the BYTE_STREAM_SPLIT encoding for the smaller block would achieve better results than using PLAIN encoding for it. For each block it has to store an additional *type bit* to be able to determine what encoding was used when decoding. This adds an overhead in storage because at least N/K bits are necessary for storing the types where N is the number of values in the array and K is the block size. Also, the heuristic can be complex enough that encoding is slow.
+A possible heuristic can be seen in my Arrow fork patches. It is based on this idea: http://romania.amazon.com/techon/presentations/DataStreamsAlgorithms_FlorinManolache.pdf
+
 # ARROW's default compression level
 ## Compression ratio
 ### Data with only one column. Data has high 0-order-entropy when the distribution is over the values (4 bytes).
+Measurements are in *megabytes*.
 | Combination \ F32 data            | msg_bt | msg_lu | msg_sp | msg_sweep3d | num_brain | num_comet | num_control | num_plasma | obs_error | obs_info | obs_spitzer | obs_temp |
 |-----------------------------------|--------|--------|--------|-------------|-----------|-----------|-------------|------------|-----------|----------|-------------|----------|
 | no compression                    | 128    | 93     | 139    | 60          | 68        | 52        | 77          | 17         | 30        | 10       | 95          | 20       |
@@ -34,8 +60,8 @@ The *adaptive byte_stream_split encoding* is only useful for whenever the data i
 
 The *dictionary encoding* only produces good results for the Can_01_SPEC, GT61, GT62 and num_plasma which are tests with very repetitive data. For all other is typically worse than the *plain encoding*.
 
-
 ## Compression speed
+Measurements are in *seconds*.
 | Combination \ F32 data            | msg_bt | msg_lu | msg_sp | msg_sweep3d | num_brain | num_comet | num_control | num_plasma | obs_error | obs_info | obs_spitzer | obs_temp |
 |-----------------------------------|--------|--------|--------|-------------|-----------|-----------|-------------|------------|-----------|----------|-------------|----------|
 | gzip                              | 5.43   | 3.84   | 8.18   | 2.55        | 3.16      | 1.83      | 3.04        | 0.57       | 1.42      | 0.35     | 6.38        | 0.80     |
@@ -69,6 +95,7 @@ Using *byte_stream_encoding* with GZIP also leads to faster creation of parquet 
 
 # Different compression levels for ZSTD
 ## Compression ratio
+Measurements are in *megabytes*.
 | Data         | Level | zstd (MB) | dictionary + zstd (MB) | byte_stream_splt + zstd (MB) | adaptive byte_stream_split + zstd (MB) |
 |--------------|-------|-----------|------------------------|------------------------------|----------------------------------------|
 | msg_bt       |       |           |                        |                              |                                        |
