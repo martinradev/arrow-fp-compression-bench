@@ -4,6 +4,7 @@
 #include "arrow/type.h"
 #include "arrow/io/file.h"
 #include "arrow/pretty_print.h"
+#include "arrow/util/compression.h"
 #include <parquet/arrow/writer.h>
 #include <parquet/arrow/reader.h>
 #include <parquet/properties.h>
@@ -157,6 +158,7 @@ void runTest(const std::string &fileName,
              parquet::Compression::type compression,
              parquet::Encoding::type encodingType,
              int32_t compressionLevel,
+             uint8_t lossyCompressionPrecision,
              size_t numRuns)
 {
     std::string encoding;
@@ -164,6 +166,18 @@ void runTest(const std::string &fileName,
     {
         case parquet::Encoding::type::BYTE_STREAM_SPLIT:
             encoding += "fp";
+            break;
+        case parquet::Encoding::type::BYTE_STREAM_SPLIT_XOR:
+            encoding += "fp_xor";
+            break;
+        case parquet::Encoding::type::BYTE_STREAM_SPLIT_BYTE_RLE:
+            encoding += "fp_rle";
+            break;
+        case parquet::Encoding::type::BYTE_STREAM_SPLIT_COMPONENT:
+            encoding += "fp_comp";
+            break;
+        case parquet::Encoding::type::BYTE_STREAM_SPLIT_RYANBLUE_RLE:
+            encoding += "fp_rb";
             break;
         case parquet::Encoding::type::RLE_DICTIONARY:
             encoding += "dict";
@@ -175,11 +189,12 @@ void runTest(const std::string &fileName,
             std::cerr << "We cannot have both dictionary and fp" << std::endl;
             exit(-1);
     }
-    std::string newName = fileName + "." + parquet::CompressionToString(compression) + "." + encoding;
+    std::string newName = fileName + "." + arrow::util::Codec::GetCodecAsString(compression) + "." + encoding;
     if (compressionLevel != -1)
     {
         newName += "." + std::to_string(compressionLevel);
     }
+    newName += "_pre" + std::to_string(lossyCompressionPrecision);
 
     parquet::WriterProperties::Builder props_builder;
 
@@ -204,6 +219,7 @@ void runTest(const std::string &fileName,
             {
                 props_builder.compression_level(compressionLevel);
             }
+            props_builder.lossy_compression_precision(field->name(), lossyCompressionPrecision);
         }
     }
     props_builder.compression(compression);
@@ -236,13 +252,15 @@ void printHelp()
     std::cout << "  " << "Read a raw binary file of FP32 or FP64 values." << std::endl;
     std::cout << "  " << "For FP32, the file extension should be .sp." << std::endl;
     std::cout << "  " << "For FP64, the file extension should be .dp." << std::endl;
-    std::cout << " " << "-c [CODEC],[ENCODING],[COMPRESSION_LEVEL] ..." << std::endl;
+    std::cout << " " << "-c [CODEC],[ENCODING],[COMPRESSION_LEVEL],[PRECISION] ..." << std::endl;
     std::cout << "  " << "CODEC must be one of the following:" << std::endl;
-    std::cout << "   " << "zstd, gzip, snappy, lz4, uncompressed" << std::endl;
+    std::cout << "   " << "zstd, gzip, snappy, lz4, zfp, uncompressed" << std::endl;
     std::cout << "  " << "ENCODING must be one of the following:" << std::endl;
     std::cout << "   " << "plain, dictionary, split" << std::endl;
     std::cout << "  " << "COMPRESSION_LEVEL depends on the codec being used." << std::endl;
     std::cout << "  " << "Pass -1 if you want to use the default compression level." << std::endl;
+    std::cout << "  " << "PRECISION determines the precision for ZFP." << std::endl;
+    std::cout << "  " << "It always has to be specified and it is dependent on the data type." << std::endl;
     std::cout << std::endl;
     std::cout << "Example runs:" << std::endl;
     std::cout << "  " << "parquet_test -p file.parquet -c zstd,plain,6 gzip,dictionary,-1" << std::endl;
@@ -284,6 +302,10 @@ parquet::Compression::type GetCompressionTypeFromString(const char *compressionN
     {
         return parquet::Compression::UNCOMPRESSED;
     }
+    else if (strcmp(compressionName, "zfp") == 0)
+    {
+        return parquet::Compression::ZFP;
+    }
     else
     {
         handleInvalidArg();
@@ -304,6 +326,22 @@ parquet::Encoding::type GetEncodingTypeFromString(const char *encodingName)
     {
         return parquet::Encoding::type::BYTE_STREAM_SPLIT;
     }
+    else if (strcmp(encodingName, "split_xor") == 0)
+    {
+        return parquet::Encoding::type::BYTE_STREAM_SPLIT_XOR;
+    }
+    else if (strcmp(encodingName, "split_component") == 0)
+    {
+        return parquet::Encoding::type::BYTE_STREAM_SPLIT_COMPONENT;
+    }
+    else if (strcmp(encodingName, "split_rle") == 0)
+    {
+        return parquet::Encoding::type::BYTE_STREAM_SPLIT_BYTE_RLE;
+    }
+    else if (strcmp(encodingName, "split_ryanblue_rle") == 0)
+    {
+        return parquet::Encoding::type::BYTE_STREAM_SPLIT_RYANBLUE_RLE;
+    }
     else
     {
         handleInvalidArg();
@@ -315,6 +353,7 @@ struct TestParameters
     parquet::Compression::type compression;
     parquet::Encoding::type encoding;
     int32_t compressionLevel;
+    uint8_t precision;
 };
 
 enum class FileType
@@ -418,11 +457,21 @@ int main(int argc, char *argv[]) {
                         const int32_t compressionLevel = atoi(splitBorder+1);
                         const auto compressionType = GetCompressionTypeFromString(compression);
                         const auto encodingType = GetEncodingTypeFromString(encoding);
+                        splitBorder = strstr(splitBorder + 1, ",");
+                        if (splitBorder == nullptr)
+                        {
+                            handleInvalidArg();
+                        }
+                        splitBorder[0] = '\0';
+                        char *precisionStr = splitBorder + 1;
+                        const uint8_t precision = atoi(precisionStr);
+
                         TestParameters job =
                         {
                             compressionType,
                             encodingType,
-                            compressionLevel
+                            compressionLevel,
+                            precision
                         };
                         testJobs.push_back(job);
                     }
@@ -456,7 +505,7 @@ int main(int argc, char *argv[]) {
         }
         for (const auto &job : testJobs)
         {
-            runTest(fileName, table, job.compression, job.encoding, job.compressionLevel, 2U);
+            runTest(fileName, table, job.compression, job.encoding, job.compressionLevel, job.precision, 2U);
         }
     }
 
