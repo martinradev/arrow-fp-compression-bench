@@ -10,6 +10,9 @@ The tables below include metrics for the following configurations:
 * BYTE_STREAM_SPLIT encoding, ZSTD
 * ADAPTIVE_BYTE_STREAM_SPLIT encoding, GZIP
 * ADAPTIVE_BYTE_STREAM_SPLIT encoding, ZSTD
+* ZFP (fixed-precision mode, 32 bits)
+* ZFP (fixed-precision mode, 24 bits)
+* ZFP (fixed-precision mode, 16 bits)
 
 The *BYTE_STREAM_SPLIT* and *ADAPTIVE_BYTE_STREAM_SPLIT* encodings are new, designed by me and not yet part of the Apache Parquet project.
 For the not-production-level C++ implementation of both, you can check my fork of Apache Arrow: https://github.com/martinradev/arrow.
@@ -43,6 +46,7 @@ Measurements are in *megabytes*.
 | ZFP (24-bit precision)            | 91     | 72     | 105    | 41          | 49        | 37        | 59          | 14         | 24        | 8        | 74          | 15       |
 | ZFP (16-bit precision)            | 61     | 49     | 71     | 27          | 32        | 32        | 40          | 9          | 16        | 5        | 51          | 11       |
 
+The plot does not include ZFP at the moment.
 ![](plot_data/Figure_1.png)
 
 ### Multiple columns but data is extremely repetitive.
