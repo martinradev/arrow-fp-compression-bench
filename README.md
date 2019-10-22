@@ -11,8 +11,11 @@ The tables below include metrics for the following configurations:
 * ADAPTIVE_BYTE_STREAM_SPLIT encoding, GZIP
 * ADAPTIVE_BYTE_STREAM_SPLIT encoding, ZSTD
 * ZFP (fixed-precision mode, 32 bits)
+* ZFP (fixed-precision mode, 28 bits)
 * ZFP (fixed-precision mode, 24 bits)
+* ZFP (fixed-precision mode, 20 bits)
 * ZFP (fixed-precision mode, 16 bits)
+* ZFP (fixed-precision mode, 14 bits)
 
 The *BYTE_STREAM_SPLIT* and *ADAPTIVE_BYTE_STREAM_SPLIT* encodings are new, designed by me and not yet part of the Apache Parquet project.
 For the not-production-level C++ implementation of both, you can check my fork of Apache Arrow: https://github.com/martinradev/arrow.
