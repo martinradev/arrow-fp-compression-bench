@@ -43,8 +43,12 @@ Measurements are in *megabytes*.
 | byte_stream_split + zstd          | 84     | 67     | 88     | 13          | 49        | 38        | 63          | 1          | 21        | 7        | 72          | 16       |
 | adaptive byte_stream_split + zstd | 88     | 70     | 92     | 13          | 51        | 39        | 68          | 1          | 20        | 7        | 81          | 17       |
 | ZFP (32-bit precision)            | 121    | 95     | 140    | 56          | 66        | 48        | 78          | 18         | 31        | 10       | 98          | 20       |
+| ZFP (28-bit precision)            | 106    | 84     | 123    | 49          | 58        | 43        | 68          | 16         | 27        | 9        | 86          | 18       |
 | ZFP (24-bit precision)            | 91     | 72     | 105    | 41          | 49        | 37        | 59          | 14         | 24        | 8        | 74          | 15       |
+| ZFP (20-bit precision)            | 76     | 61     | 88     | 34          | 41        | 31        | 49          | 12         | 20        | 6        | 63          | 13       |
 | ZFP (16-bit precision)            | 61     | 49     | 71     | 27          | 32        | 32        | 40          | 9          | 16        | 5        | 51          | 11       |
+| ZFP (14-bit precision)            | 54     | 43     | 62     | 23          | 28        | 22        | 35          | 8          | 14        | 5        | 45          | 9        |
+| ZFP (12-bit precision)            | 46     | 38     | 53     | 20          | 24        | 19        | 31          | 7          | 12        | 4        | 39          | 8        |
 
 The plot does not include ZFP at the moment.
 ![](plot_data/Figure_1.png)
@@ -66,7 +70,6 @@ The plot does not include ZFP at the moment.
 
 We can see that the *byte_stream_split encoding* improves the compression ratio for the majority of test cases.
 
-
 The *adaptive byte_stream_split encoding* is only useful for whenever the data is very repetitive as is the case for the GT61 and GT62 tests. For all other cases, the encoding is not competitive due to the overhead from storing block types, encoding at the block level and less than ideal heuristic.
 
 
@@ -85,9 +88,14 @@ Measurements are in *seconds*.
 | dictionary + zstd                 | 0.67   | 0.40   | 0.55   | 0.16        | 0.27      | 0.23      | 0.31        | 0.07       | 0.19      | 0.05     | 0.52        | 0.09     |
 | byte_stream_split + zstd          | 0.70   | 0.36   | 0.60   | 0.18        | 0.29      | 0.27      | 0.35        | 0.04       | 0.14      | 0.04     | 0.59        | 0.09     |
 | adaptive byte_stream_split + zstd | 1.72   | 1.23   | 1.89   | 0.66        | 0.88      | 0.68      | 1.09        | 0.18       | 0.40      | 0.11     | 1.31        | 0.28     |
-| ZFP (32-bit precision)            | 3.49   | 2.64   | 4.04   | 1.85        | 2.29      | 1.61      | 2.51        | 0.51       | 0.94      | 0.28     | 3.11        | 0.60     |
-| ZFP (24-bit precision)            | 3.26   | 2.43   | 3.61   | 1.66        | 1.85      | 1.30      | 2.01        | 0.41       | 0.74      | 0.22     | 2.46        | 0.48     |
-| ZFP (16-bit precision)            | 2.70   | 2.07   | 2.97   | 1.37        | 1.54      | 1.13      | 1.75        | 0.35       | 0.64      | 0.19     | 2.14        | 0.42     |
+| ZFP (32-bit precision)            | 2.09   | 1.61   | 2.38   | 1.13        | 1.26      | 0.89      | 1.43        | 0.27       | 0.51      | 0.15     | 1.72        | 0.34     |
+| ZFP (28-bit precision)            | 1.89   | 1.45   | 2.14   | 1.03        | 1.14      | 0.81      | 1.30        | 0.25       | 0.46      | 0.13     | 1.58        | 0.31     |
+| ZFP (24-bit precision)            | 1.79   | 1.30   | 1.93   | 0.93        | 1.03      | 0.73      | 1.18        | 0.22       | 0.42      | 0.12     | 1.43        | 0.28     |
+| ZFP (20-bit precision)            | 1.49   | 1.19   | 1.69   | 0.83        | 0.92      | 0.66      | 1.05        | 0.19       | 0.37      | 0.10     | 1.27        | 0.24     |
+| ZFP (16-bit precision)            | 1.31   | 1.00   | 1.48   | 0.71        | 0.80      | 0.58      | 0.93        | 0.16       | 0.32      | 0.09     | 1.12        | 0.21     |
+| ZFP (14-bit precision)            | 1.20   | 0.91   | 1.35   | 0.65        | 0.75      | 0.54      | 0.86        | 0.15       | 0.29      | 0.08     | 1.03        | 0.20     |
+| ZFP (12-bit precision)            | 1.11   | 0.83   | 1.24   | 0.57        | 0.69      | 0.50      | 0.79        | 0.14       | 0.27      | 0.07     | 0.95        | 0.18     |
+
 
 ![](plot_data/Figure_3.png)
 
