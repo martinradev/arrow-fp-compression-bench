@@ -25,35 +25,35 @@ A possible heuristic can be seen in my Arrow fork patches. It is based on this i
 
 # ARROW's default compression level
 ## Compression ratio
-Measurements are in *megabytes*.
+Compression ratio is computed as uncompressed size / compressed size. Higher is better.
 ### Data with only one column. Data has high 0-order-entropy when the distribution is over the values (4 bytes).
 
 | Combination \ F32 data            | msg_bt | msg_lu | msg_sp | msg_sweep3d | num_brain | num_comet | num_control | num_plasma | obs_error | obs_info | obs_spitzer | obs_temp |
 |-----------------------------------|--------|--------|--------|-------------|-----------|-----------|-------------|------------|-----------|----------|-------------|----------|
-| no compression                    | 128    | 93     | 139    | 60          | 68        | 52        | 77          | 17         | 30        | 10       | 95          | 20       |
-| gzip                              | 108    | 86     | 116    | 53          | 60        | 45        | 71          | 13         | 21        | 8        | 80          | 18       |
-| dictionary + gzip                 | 109    | 86     | 116    | 53          | 61        | 46        | 71          | 1          | 21        | 8        | 80          | 19       |
-| byte_stream_split + gzip          | 84     | 70     | 86     | 22          | 49        | 38        | 63          | 2          | 20        | 6        | 73          | 16       |
-| adaptive byte_stream_split + gzip | 85     | 71     | 88     | 41          | 52        | 39        | 66          | 13         | 22        | 7        | 80          | 17       |
-| zstd                              | 112    | 87     | 125    | 19          | 60        | 45        | 71          | 2          | 24        | 8        | 83          | 18       |
-| dictionary + zstd                 | 113    | 88     | 126    | 20          | 61        | 46        | 72          | 1          | 24        | 8        | 83          | 19       |
-| byte_stream_split + zstd          | 84     | 67     | 88     | 13          | 49        | 38        | 63          | 1          | 21        | 7        | 72          | 16       |
-| adaptive byte_stream_split + zstd | 88     | 70     | 92     | 13          | 51        | 39        | 68          | 1          | 20        | 7        | 81          | 17       |
+| no compression                    | 1.00   | 1.00   | 1.00   | 1.00        | 1.00      | 1.00      | 1.00        | 1.00       | 1.00      | 1.00     | 1.00        | 1.00     |
+| gzip                              | 1.19   | 1.08   | 1.20   | 1.13        | 1.13      | 1.16      | 1.08        | 1.31       | 1.43      | 1.25     | 1.19        | 1.11     |
+| dictionary + gzip                 | 1.17   | 1.08   | 1.20   | 1.13        | 1.11      | 1.13      | 1.08        | 17.00      | 1.43      | 1.25     | 1.19        | 1.05     |
+| byte_stream_split + gzip          | 1.52   | 1.33   | 1.62   | 2.73        | 1.39      | 1.37      | 1.22        | 8.50       | 1.50      | 1.67     | 1.30        | 1.25     |
+| adaptive byte_stream_split + gzip | 1.51   | 1.31   | 1.58   | 1.46        | 1.31      | 1.33      | 1.17        | 1.31       | 1.36      | 1.43     | 1.19        | 1.18     |
+| zstd                              | 1.14   | 1.07   | 1.11   | 3.16        | 1.13      | 1.16      | 1.08        | 8.50       | 1.25      | 1.25     | 1.14        | 1.11     |
+| dictionary + zstd                 | 1.13   | 1.06   | 1.10   | 3.00        | 1.11      | 1.13      | 1.07        | 17.00      | 1.25      | 1.25     | 1.14        | 1.05     |
+| byte_stream_split + zstd          | 1.52   | 1.39   | 1.58   | 4.62        | 1.39      | 1.37      | 1.22        | 17.00      | 1.43      | 1.43     | 1.32        | 1.25     |
+| adaptive byte_stream_split + zstd | 1.45   | 1.33   | 1.51   | 4.62        | 1.33      | 1.33      | 1.13        | 17.00      | 1.50      | 1.43     | 1.17        | 1.18     |
 
 ![](plot_data/Figure_1.png)
 
 ### Multiple columns but data is extremely repetitive.
-| Combination \ mixed data          | Can_01_SPEC | GT61 | GT62 |
-|-----------------------------------|-------------|------|------|
-| no compression                    | 3300        | 2414 | 2429 |
-| gzip                              | 1545        | 115  | 116  |
-| dictionary + gzip                 | 1131        | 123  | 124  |
-| byte_stream_split + gzip          | 1565        | 184  | 186  |
-| adaptive byte_stream_split + gzip | 1788        | 130  | 129  |
-| zstd                              | 1741        | 153  | 156  |
-| dictionary + zstd                 | 1135        | 156  | 154  |
-| byte_stream_split + zstd          | 1581        | 222  | 221  |
-| adaptive byte_stream_split + zstd | 1985        | 173  | 173  |
+| Combination \ mixed data          | Can_01_SPEC | GT61  | GT62  |
+|-----------------------------------|-------------|-------|-------|
+| no compression                    | 1.00        | 1.00  | 1.00  |
+| gzip                              | 2.14        | 20.99 | 20.94 |
+| dictionary + gzip                 | 2.92        | 19.63 | 19.59 |
+| byte_stream_split + gzip          | 2.11        | 13.12 | 13.06 |
+| adaptive byte_stream_split + gzip | 1.85        | 18.57 | 18.83 |
+| zstd                              | 1.90        | 15.78 | 15.57 |
+| dictionary + zstd                 | 2.91        | 15.47 | 15.77 |
+| byte_stream_split + zstd          | 2.09        | 10.87 | 10.99 |
+| adaptive byte_stream_split + zstd | 1.66        | 13.95 | 14.04 |
 
 ![](plot_data/Figure_2.png)
 
@@ -65,31 +65,31 @@ The *adaptive byte_stream_split encoding* is only useful for whenever the data i
 The *dictionary encoding* only produces good results for the Can_01_SPEC, GT61, GT62 and num_plasma which are tests with very repetitive data. For all other is typically worse than the *plain encoding*.
 
 ## Compression speed
-Measurements are in *seconds*.
+Measurements are in *MBs/second*. Higher is better.
 
 | Combination \ F32 data            | msg_bt | msg_lu | msg_sp | msg_sweep3d | num_brain | num_comet | num_control | num_plasma | obs_error | obs_info | obs_spitzer | obs_temp |
 |-----------------------------------|--------|--------|--------|-------------|-----------|-----------|-------------|------------|-----------|----------|-------------|----------|
-| gzip                              | 5.43   | 3.84   | 8.18   | 2.55        | 3.16      | 1.83      | 3.04        | 0.57       | 1.42      | 0.35     | 6.38        | 0.80     |
-| dictionary + gzip                 | 5.55   | 4.12   | 7.75   | 2.56        | 3.20      | 1.86      | 3.08        | 0.15       | 1.45      | 0.38     | 6.35        | 0.84     |
-| byte_stream_split + gzip          | 4.07   | 2.72   | 4.12   | 1.39        | 2.06      | 1.81      | 4.01        | 0.25       | 1.08      | 0.27     | 7.23        | 1.00     |
-| adaptive byte_stream_split + gzip | 5.06   | 3.65   | 5.24   | 2.22        | 2.74      | 2.09      | 4.27        | 0.62       | 1.31      | 0.33     | 6.61        | 1.10     |
-| zstd                              | 0.67   | 0.38   | 0.54   | 0.14        | 0.25      | 0.21      | 0.29        | 0.02       | 0.17      | 0.03     | 0.49        | 0.07     |
-| dictionary + zstd                 | 0.67   | 0.40   | 0.55   | 0.16        | 0.27      | 0.23      | 0.31        | 0.07       | 0.19      | 0.05     | 0.52        | 0.09     |
-| byte_stream_split + zstd          | 0.70   | 0.36   | 0.60   | 0.18        | 0.29      | 0.27      | 0.35        | 0.04       | 0.14      | 0.04     | 0.59        | 0.09     |
-| adaptive byte_stream_split + zstd | 1.72   | 1.23   | 1.89   | 0.66        | 0.88      | 0.68      | 1.09        | 0.18       | 0.40      | 0.11     | 1.31        | 0.28     |
+| gzip                              | 23.57  | 24.22  | 16.99  | 23.53       | 21.52     | 28.42     | 25.33       | 29.82      | 21.13     | 28.57    | 14.89       | 25.00    |
+| dictionary + gzip                 | 23.06  | 22.57  | 17.94  | 23.44       | 21.25     | 27.96     | 25.00       | 113.33     | 20.69     | 26.32    | 14.96       | 23.81    |
+| byte_stream_split + gzip          | 31.45  | 34.19  | 33.74  | 43.17       | 33.01     | 28.73     | 19.20       | 68.00      | 27.78     | 37.04    | 13.14       | 20.00    |
+| adaptive byte_stream_split + gzip | 25.30  | 25.48  | 26.53  | 27.03       | 24.82     | 24.88     | 18.03       | 27.42      | 22.90     | 30.30    | 14.37       | 18.18    |
+| zstd                              | 191.04 | 244.74 | 257.41 | 428.57      | 272.00    | 247.62    | 265.52      | 850.00     | 176.47    | 333.33   | 193.88      | 285.71   |
+| dictionary + zstd                 | 191.04 | 232.50 | 252.73 | 375.00      | 251.85    | 226.09    | 248.39      | 242.86     | 157.89    | 200.00   | 182.69      | 222.22   |
+| byte_stream_split + zstd          | 182.86 | 258.33 | 231.67 | 333.33      | 234.48    | 192.59    | 220.00      | 425.00     | 214.29    | 250.00   | 161.02      | 222.22   |
+| adaptive byte_stream_split + zstd | 74.42  | 75.61  | 73.54  | 90.91       | 77.27     | 76.47     | 70.64       | 94.44      | 75.00     | 90.91    | 72.52       | 71.43    |
 
 ![](plot_data/Figure_3.png)
 
-| Combination \ mixed data          | Can_01_SPEC | GT61  | GT62  |
-|-----------------------------------|-------------|-------|-------|
-| gzip                              | 374.48      | 39.12 | 40.26 |
-| dictionary + gzip                 | 60.29       | 25.51 | 28.23 |
-| byte_stream_split + gzip          | 381.25      | 61.40 | 62.89 |
-| adaptive byte_stream_split + gzip | 340.57      | 47.36 | 46.97 |
-| zstd                              | 28.91       | 6.40  | 6.89  |
-| dictionary + zstd                 | 18.04       | 9.25  | 10.13 |
-| byte_stream_split + zstd          | 55.48       | 9.99  | 9.64  |
-| adaptive byte_stream_split + zstd | 107.00      | 12.73 | 12.77 |
+| Combination \ mixed data          | Can_01_SPEC | GT61   | GT62   |
+|-----------------------------------|-------------|--------|--------|
+| gzip                              | 8.81        | 61.71  | 60.33  |
+| dictionary + gzip                 | 54.74       | 94.63  | 86.04  |
+| byte_stream_split + gzip          | 8.66        | 39.32  | 38.62  |
+| adaptive byte_stream_split + gzip | 9.69        | 50.97  | 51.71  |
+| zstd                              | 114.15      | 377.19 | 352.54 |
+| dictionary + zstd                 | 182.93      | 260.97 | 239.78 |
+| byte_stream_split + zstd          | 59.48       | 241.64 | 251.97 |
+| adaptive byte_stream_split + zstd | 30.84       | 189.63 | 190.21 |
 
 ![](plot_data/Figure_4.png)
 
@@ -113,74 +113,73 @@ For almost any other case, the *BYTE_STREAM_SPLIT + zstd* combination tends to p
 
 # Different compression levels for ZSTD
 ## Compression ratio
-Measurements are in *megabytes*.
 
 | Data         | Level | zstd (MB) | dictionary + zstd (MB) | byte_stream_splt + zstd (MB) | adaptive byte_stream_split + zstd (MB) |
 |--------------|-------|-----------|------------------------|------------------------------|----------------------------------------|
 | msg_bt       |       |           |                        |                              |                                        |
-|              | 1     | 112       | 113                    | 84                           | 89                                     |
-|              | 4     | 110       | 111                    | 80                           | 84                                     |
-|              | 7     | 110       | 111                    | 80                           | 83                                     |
-|              | 10    | 110       | 111                    | 80                           | 82                                     |
+|              | 1     | 1.14      | 1.13                   | 1.52                         | 1.44                                   |
+|              | 4     | 1.16      | 1.15                   | 1.60                         | 1.52                                   |
+|              | 7     | 1.16      | 1.15                   | 1.60                         | 1.54                                   |
+|              | 10    | 1.16      | 1.15                   | 1.60                         | 1.56                                   |
 | msg_lu       |       |           |                        |                              |                                        |
-|              | 1     | 87        | 88                     | 67                           | 70                                     |
-|              | 4     | 87        | 88                     | 65                           | 67                                     |
-|              | 7     | 87        | 87                     | 64                           | 65                                     |
-|              | 10    | 87        | 87                     | 64                           | 65                                     |
+|              | 1     | 1.07      | 1.06                   | 1.39                         | 1.33                                   |
+|              | 4     | 1.07      | 1.06                   | 1.43                         | 1.39                                   |
+|              | 7     | 1.07      | 1.07                   | 1.45                         | 1.43                                   |
+|              | 10    | 1.07      | 1.07                   | 1.45                         | 1.43                                   |
 | msg_sp       |       |           |                        |                              |                                        |
-|              | 1     | 125       | 126                    | 88                           | 92                                     |
-|              | 4     | 124       | 125                    | 86                           | 88                                     |
-|              | 7     | 123       | 123                    | 85                           | 87                                     |
-|              | 10    | 123       | 123                    | 85                           | 87                                     |
+|              | 1     | 1.11      | 1.10                   | 1.58                         | 1.51                                   |
+|              | 4     | 1.12      | 1.11                   | 1.62                         | 1.58                                   |
+|              | 7     | 1.13      | 1.13                   | 1.64                         | 1.60                                   |
+|              | 10    | 1.13      | 1.13                   | 1.64                         | 1.60                                   |
 | msg_sweep3d  |       |           |                        |                              |                                        |
-|              | 1     | 19        | 20                     | 13                           | 13                                     |
-|              | 4     | 18        | 20                     | 12                           | 13                                     |
-|              | 7     | 18        | 19                     | 12                           | 12                                     |
-|              | 10    | 18        | 18                     | 12                           | 12                                     |
+|              | 1     | 3.16      | 3.00                   | 4.62                         | 4.62                                   |
+|              | 4     | 3.33      | 3.00                   | 5.00                         | 4.62                                   |
+|              | 7     | 3.33      | 3.16                   | 5.00                         | 5.00                                   |
+|              | 10    | 3.33      | 3.33                   | 5.00                         | 5.00                                   |
 | num_brain    |       |           |                        |                              |                                        |
-|              | 1     | 60        | 61                     | 49                           | 51                                     |
-|              | 4     | 60        | 61                     | 48                           | 49                                     |
-|              | 7     | 60        | 61                     | 48                           | 49                                     |
-|              | 10    | 60        | 61                     | 48                           | 48                                     |
+|              | 1     | 1.13      | 1.11                   | 1.39                         | 1.33                                   |
+|              | 4     | 1.13      | 1.11                   | 1.42                         | 1.39                                   |
+|              | 7     | 1.13      | 1.11                   | 1.42                         | 1.39                                   |
+|              | 10    | 1.13      | 1.11                   | 1.42                         | 1.42                                   |
 | num_comet    |       |           |                        |                              |                                        |
-|              | 1     | 45        | 46                     | 38                           | 39                                     |
-|              | 4     | 45        | 46                     | 38                           | 39                                     |
-|              | 7     | 45        | 46                     | 38                           | 39                                     |
-|              | 10    | 45        | 46                     | 38                           | 39                                     |
+|              | 1     | 1.16      | 1.13                   | 1.37                         | 1.33                                   |
+|              | 4     | 1.16      | 1.13                   | 1.37                         | 1.33                                   |
+|              | 7     | 1.16      | 1.13                   | 1.37                         | 1.33                                   |
+|              | 10    | 1.16      | 1.13                   | 1.37                         | 1.33                                   |
 | num_control  |       |           |                        |                              |                                        |
-|              | 1     | 71        | 72                     | 63                           | 68                                     |
-|              | 4     | 71        | 72                     | 64                           | 65                                     |
-|              | 7     | 71        | 72                     | 63                           | 65                                     |
-|              | 10    | 71        | 72                     | 63                           | 65                                     |
+|              | 1     | 1.08      | 1.07                   | 1.22                         | 1.13                                   |
+|              | 4     | 1.08      | 1.07                   | 1.20                         | 1.18                                   |
+|              | 7     | 1.08      | 1.07                   | 1.22                         | 1.18                                   |
+|              | 10    | 1.08      | 1.07                   | 1.22                         | 1.18                                   |
 | obs_error    |       |           |                        |                              |                                        |
-|              | 1     | 24        | 24                     | 21                           | 21                                     |
-|              | 4     | 20        | 21                     | 21                           | 20                                     |
-|              | 7     | 20        | 21                     | 19                           | 20                                     |
-|              | 10    | 20        | 20                     | 19                           | 20                                     |
+|              | 1     | 1.25      | 1.25                   | 1.43                         | 1.43                                   |
+|              | 4     | 1.50      | 1.43                   | 1.43                         | 1.50                                   |
+|              | 7     | 1.50      | 1.43                   | 1.58                         | 1.50                                   |
+|              | 10    | 1.50      | 1.50                   | 1.58                         | 1.50                                   |
 | obs_info     |       |           |                        |                              |                                        |
-|              | 1     | 8         | 8                      | 7                            | 7                                      |
-|              | 4     | 7         | 7                      | 6                            | 6                                      |
-|              | 7     | 6         | 7                      | 5                            | 5                                      |
-|              | 10    | 6         | 7                      | 5                            | 5                                      |
+|              | 1     | 1.25      | 1.25                   | 1.43                         | 1.43                                   |
+|              | 4     | 1.43      | 1.43                   | 1.67                         | 1.67                                   |
+|              | 7     | 1.67      | 1.43                   | 2.00                         | 2.00                                   |
+|              | 10    | 1.67      | 1.43                   | 2.00                         | 2.00                                   |
 | obs_spitzer  |       |           |                        |                              |                                        |
-|              | 1     | 83        | 83                     | 72                           | 81                                     |
-|              | 4     | 77        | 77                     | 73                           | 78                                     |
-|              | 7     | 75        | 75                     | 72                           | 77                                     |
-|              | 10    | 75        | 75                     | 72                           | 77                                     |
+|              | 1     | 1.14      | 1.14                   | 1.32                         | 1.17                                   |
+|              | 4     | 1.23      | 1.23                   | 1.30                         | 1.22                                   |
+|              | 7     | 1.27      | 1.27                   | 1.32                         | 1.23                                   |
+|              | 10    | 1.27      | 1.27                   | 1.32                         | 1.23                                   |
 | obs_temp     |       |           |                        |                              |                                        |
-|              | 1     | 18        | 19                     | 16                           | 17                                     |
-|              | 4     | 18        | 19                     | 16                           | 17                                     |
-|              | 7     | 18        | 19                     | 16                           | 17                                     |
-|              | 10    | 18        | 19                     | 16                           | 17                                     |
+|              | 1     | 1.11      | 1.05                   | 1.25                         | 1.18                                   |
+|              | 4     | 1.11      | 1.05                   | 1.25                         | 1.18                                   |
+|              | 7     | 1.11      | 1.05                   | 1.25                         | 1.18                                   |
+|              | 10    | 1.11      | 1.05                   | 1.25                         | 1.18                                   |
 | GT61         |       |           |                        |                              |                                        |
-|              | 1     | 153       | 156                    | 222                          | 162                                    |
-|              | 4     | 142       | 128                    | 203                          | 148                                    |
-|              | 7     | 121       | 120                    | 182                          | 128                                    |
-|              | 10    | 120       | 119                    | 180                          | 126                                    |
+|              | 1     | 15.78     | 15.47                  | 10.87                        | 14.90                                  |
+|              | 4     | 17.00     | 18.86                  | 11.89                        | 16.31                                  |
+|              | 7     | 19.95     | 20.12                  | 13.26                        | 18.86                                  |
+|              | 10    | 20.12     | 20.29                  | 13.41                        | 19.16                                  |
 | GT62         |       |           |                        |                              |                                        |
-|              | 1     | 156       | 154                    | 221                          | 163                                    |
-|              | 4     | 145       | 132                    | 205                          | 150                                    |
-|              | 7     | 123       | 122                    | 184                          | 128                                    |
-|              | 10    | 122       | 121                    | 181                          | 127                                    |
+|              | 1     | 15.57     | 15.77                  | 10.99                        | 14.90                                  |
+|              | 4     | 16.75     | 18.40                  | 11.85                        | 16.19                                  |
+|              | 7     | 19.75     | 19.91                  | 13.20                        | 18.98                                  |
+|              | 10    | 19.91     | 20.07                  | 13.42                        | 19.13                                  |
 
 Note that there is a small discrepancy between ZSTD with level 1 and the tables from before for the ADAPTIVE_STREAM_SPLIT_ENCODING. The small difference in compression ratio is due to tweaks in the heuristic midway generating the data for the tables. Because it takes some time to re-generate the tables, I decided to leave it as it is because the difference is very small.
