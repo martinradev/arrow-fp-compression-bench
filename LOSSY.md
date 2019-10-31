@@ -9,7 +9,7 @@ The tables below include metrics for the following configurations:
 * ZFP (fixed-precision mode, 14 bits)
 
 ## Compression ratio
-The compression ratio is computed as uncompressed size / compressed size.
+The compression ratio is computed as uncompressed size / compressed size. Higher is better.
 
 | Combination \ F32 data            | msg_bt | msg_lu | msg_sp | msg_sweep3d | num_brain | num_comet | num_control | num_plasma | obs_error | obs_info | obs_spitzer | obs_temp |
 |-----------------------------------|--------|--------|--------|-------------|-----------|-----------|-------------|------------|-----------|----------|-------------|----------|
@@ -23,7 +23,7 @@ The compression ratio is computed as uncompressed size / compressed size.
 | ZFP (12-bit precision)            | 2.78   | 2.45   | 2.62   | 3.00        | 2.83      | 2.74      | 2.48        | 2.43       | 2.50      | 2.50     | 2.44        | 2.50     |
 
 ## Compression speed
-The speed is measured in MB/s.
+The speed is measured in MB/s. Higher is better.
 
 | Combination \ F32 data            | msg_bt | msg_lu | msg_sp | msg_sweep3d | num_brain | num_comet | num_control | num_plasma | obs_error | obs_info | obs_spitzer | obs_temp |
 |-----------------------------------|--------|--------|--------|-------------|-----------|-----------|-------------|------------|-----------|----------|-------------|----------|
