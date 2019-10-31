@@ -10,6 +10,7 @@ The tables below include metrics for the following configurations:
 
 ## Compression ratio
 The compression ratio is computed as uncompressed size / compressed size.
+
 | Combination \ F32 data            | msg_bt | msg_lu | msg_sp | msg_sweep3d | num_brain | num_comet | num_control | num_plasma | obs_error | obs_info | obs_spitzer | obs_temp |
 |-----------------------------------|--------|--------|--------|-------------|-----------|-----------|-------------|------------|-----------|----------|-------------|----------|
 | no compression                    | 1.00   | 1.00   | 1.00   | 1.00        | 1.00      | 1.00      | 1.00        | 1.00       | 1.00      | 1.00     | 1.00        | 1.00     |
@@ -23,6 +24,7 @@ The compression ratio is computed as uncompressed size / compressed size.
 
 ## Compression speed
 The speed is measured in MB/s.
+
 | Combination \ F32 data            | msg_bt | msg_lu | msg_sp | msg_sweep3d | num_brain | num_comet | num_control | num_plasma | obs_error | obs_info | obs_spitzer | obs_temp |
 |-----------------------------------|--------|--------|--------|-------------|-----------|-----------|-------------|------------|-----------|----------|-------------|----------|
 | ZFP (32-bit precision)            | 61.24  | 57.76  | 58.40  | 53.10       | 53.97     | 58.43     | 53.85       | 62.96      | 58.82     | 66.67    | 55.23       | 58.82    |
