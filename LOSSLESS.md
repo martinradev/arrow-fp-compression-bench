@@ -64,6 +64,8 @@ The *adaptive byte_stream_split encoding* is only useful for whenever the data i
 
 The *dictionary encoding* only produces good results for the Can_01_SPEC, GT61, GT62 and num_plasma which are tests with very repetitive data. For all other is typically worse than the *plain encoding*.
 
+For a more detailed view of the column data in GT61 and GT62, go [here](SEPARATE_COLUMNS.md).
+
 ## Compression speed
 Measurements are in *MBs/second*. Higher is better.
 
