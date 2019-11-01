@@ -27,8 +27,14 @@ The entropy of each data set is available below:
 | obs_temp.sp    |  22.185 |        20 |
 | GT61 (avg)     |   5.173 |      2414 |
 | GT62 (avg)     |   5.195 |      2429 |
+| sbd_05.dp      |  25.000 |       269 |
+| sbd_10.dp      |  25.000 |       269 |
+| sbd_15.dp      |  25.000 |       269 |
 
-The .sp tests come from a [publicly available data set](https://userweb.cs.txstate.edu/~burtscher/research/datasets/FPsingle/).
+The msg\*.sp, num\*.sp, obs\*.sp tests come from a [publicly available data set](https://userweb.cs.txstate.edu/~burtscher/research/datasets/FPsingle/).
+
+The sbd_05.dp, sbd_10.dp, sbd_15.dp tests are taken from [here (courtesy of Brown University and SDR Bench](https://sdrbench.github.io/).
+The tests are synthetic 64-bit floating-point data.
 
 The GT61 and GT62 tests are from an internal source.
 Because both tests are Parquet files with multiple columns, we report the average entropy over all columns.
