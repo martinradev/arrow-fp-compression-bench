@@ -30,15 +30,17 @@ The entropy of each data set is available below:
 | sbd_05.dp      |  25.000 |       269 |
 | sbd_10.dp      |  25.000 |       269 |
 | sbd_15.dp      |  25.000 |       269 |
+| 631-tst.dp     |  26.553 |       824 |
 
 The msg\*.sp, num\*.sp, obs\*.sp tests come from a [publicly available data set](https://userweb.cs.txstate.edu/~burtscher/research/datasets/FPsingle/).
 
 The sbd_05.dp, sbd_10.dp, sbd_15.dp tests are taken from [here (courtesy of Brown University and SDR Bench](https://sdrbench.github.io/).
 The tests are synthetic 64-bit floating-point data.
 
+The 641-tst.dp test is taken from [here (courtesy of Kristopher William Keipert)](https://sdrbench.github.io/).
+
 The GT61 and GT62 tests are from an internal source.
 Because both tests are Parquet files with multiple columns, we report the average entropy over all columns.
-
 
 # Summary
 ## Lossless compression improvements
