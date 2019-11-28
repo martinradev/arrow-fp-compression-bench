@@ -134,6 +134,9 @@ void encode_fast(const T *input_data, size_t num_elements, uint8_t *output_data)
     }
 }
 
+// This implementation requires that input size is divisble by 64.
+// It also only supports single-precision input.
+// I didn't bother doing the changes since the unpack version is slightly faster.
 void encode(const uint8_t *input_data, size_t num_elements, uint8_t *output_data)
 {
     const size_t numBytesPerStream = num_elements;
@@ -216,15 +219,25 @@ void encode(const uint8_t *input_data, size_t num_elements, uint8_t *output_data
 /********* END SIMD ENCODERS ***************/
 
 /********* BEGIN SIMD DECODERS ***************/
-void decode_fast_float(const float *input_data, size_t num_elements, uint8_t *output_data)
+void decode_fast_float(const uint8_t *input_data, size_t num_elements, uint8_t *output_data)
 {
     size_t size = num_elements * sizeof(float);
     const size_t block_size = sizeof(__m128i) * 4U;
     const size_t num_blocks = size / block_size;
+
+    // Handle suffix first.
+    const size_t num_processed_elements = (num_blocks * block_size) / sizeof(float);
+    for (size_t i = num_processed_elements; i < num_elements; ++i) {
+        for (size_t j = 0; j < sizeof(float); ++j) {
+            const uint8_t value = input_data[num_elements * j + i];
+            output_data[i * sizeof(float) + j] = value;
+        }
+    }
+
     for (size_t i = 0; i < num_blocks; ++i) {
         __m128i v[4];
         for (size_t j = 0; j < 4; ++j) {
-            v[j] = _mm_loadu_si128((const __m128i*)&input_data[i * 4 + j * num_elements / sizeof(float)]);
+            v[j] = _mm_loadu_si128((const __m128i*)&input_data[i * 16 + j * num_elements]);
         }
         __m128i comb[4];
         comb[0] = _mm_unpacklo_epi8(v[0], v[2]);
@@ -244,15 +257,25 @@ void decode_fast_float(const float *input_data, size_t num_elements, uint8_t *ou
     }
 }
 
-void decode_fast_double(const double *input_data, size_t num_elements, uint8_t *output_data)
+void decode_fast_double(const uint8_t *input_data, size_t num_elements, uint8_t *output_data)
 {
     size_t size = num_elements * sizeof(double);
     const size_t block_size = sizeof(__m128i) * sizeof(double);
     const size_t num_blocks = size / block_size;
+
+    // Handle suffix first.
+    const size_t num_processed_elements = (num_blocks * block_size) / sizeof(float);
+    for (size_t i = num_processed_elements; i < num_elements; ++i) {
+        for (size_t j = 0; j < sizeof(float); ++j) {
+            const uint8_t value = input_data[num_elements * j + i];
+            output_data[i * sizeof(float) + j] = value;
+        }
+    }
+
     for (size_t i = 0; i < num_blocks; ++i) {
         __m128i v[8];
         for (size_t j = 0; j < 8; ++j) {
-            v[j] = _mm_loadu_si128((const __m128i*)&input_data[i * 2 + j * num_elements / sizeof(double)]);
+            v[j] = _mm_loadu_si128((const __m128i*)&input_data[i * 16 + j * num_elements]);
         }
         __m128i comb[8];
         for (size_t j = 0; j < 4; ++j) {
@@ -377,7 +400,7 @@ void test_encode() {
 
 template<typename T>
 void test_decode_typed() {
-    const size_t num_elements = 1024 * 1024;
+    const size_t num_elements = 1024 * 1024 + 133;
     using UnsignedType = typename TypeConverter<T>::UnsignedType;
     UnsignedType *input = (UnsignedType*)malloc(num_elements * sizeof(T));
     UnsignedType *output1 = (UnsignedType*)malloc(num_elements * sizeof(T));
@@ -389,9 +412,9 @@ void test_decode_typed() {
     }
     decode_simple<T>((const T*)input, num_elements, (uint8_t*)output1);
     if (std::is_same<T, float>::value) {
-        decode_fast_float((const float*)input, num_elements, (uint8_t*)output2);
+        decode_fast_float((const uint8_t*)input, num_elements, (uint8_t*)output2);
     } else {
-        decode_fast_double((const double*)input, num_elements, (uint8_t*)output2);
+        decode_fast_double((const uint8_t*)input, num_elements, (uint8_t*)output2);
     }
     /*for (size_t i = 0; i < num_elements * sizeof(T); ) {
         for (size_t j = 0; j < 16; ++j) {
@@ -461,7 +484,7 @@ void benchmark_encode_float() {
                 decode_simple_no_simd<float>((const float*)buf, buf_size/4UL, (uint8_t*)output_buf);
                 break;
                 case 7:
-                decode_fast_float((const float*)buf, buf_size/4UL, (uint8_t*)output_buf);
+                decode_fast_float(buf, buf_size/4UL, (uint8_t*)output_buf);
                 break;
                 default:
                 printf("Error\n");
@@ -527,7 +550,7 @@ void benchmark_encode_double() {
                 decode_simple_no_simd<double>((const double*)buf, buf_size/8UL, (uint8_t*)output_buf);
                 break;
                 case 6:
-                decode_fast_double((const double*)buf, buf_size/8UL, (uint8_t*)output_buf);
+                decode_fast_double(buf, buf_size/8UL, (uint8_t*)output_buf);
                 break;
                 default:
                 printf("Error\n");
@@ -558,7 +581,7 @@ void benchmark_decode() {
 int main() {
     test_encode();
     test_decode();
-    benchmark_encode_float();
-    benchmark_encode_double();
+    //benchmark_encode_float();
+    //benchmark_encode_double();
     return 0;
 }
