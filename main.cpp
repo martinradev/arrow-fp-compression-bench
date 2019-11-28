@@ -9,6 +9,7 @@
 #include <parquet/arrow/reader.h>
 #include <parquet/properties.h>
 #include <parquet/types.h>
+#include <parquet/file_reader.h>
 
 #include <unordered_map>
 #include <fstream>
@@ -190,13 +191,11 @@ void runTest(const std::string &fileName,
             exit(-1);
     }
     std::string newName = fileName + "." + arrow::util::Codec::GetCodecAsString(compression) + "." + encoding;
-    if (compressionLevel != -1)
-    {
-        newName += "." + std::to_string(compressionLevel);
-    }
-    newName += "_pre" + std::to_string(lossyCompressionPrecision);
+    newName += "." + std::to_string(compressionLevel);
+    newName += ".pre" + std::to_string(lossyCompressionPrecision);
 
     parquet::WriterProperties::Builder props_builder;
+    props_builder.data_pagesize(1024 * 1024 * 4);
 
     const auto &schema = table->schema();
     const auto &fields = schema->fields();
@@ -219,24 +218,49 @@ void runTest(const std::string &fileName,
             {
                 props_builder.compression_level(compressionLevel);
             }
-            props_builder.lossy_compression_precision(field->name(), lossyCompressionPrecision);
+            //props_builder.lossy_compression_precision(field->name(), lossyCompressionPrecision);
         }
     }
     props_builder.compression(compression);
-    
+
     auto props = props_builder.build();
     double totalTime = .0;
+    double totalDecompressTime = .0;
+    int64_t sz;
     for (size_t i = 0; i < numRuns; ++i)
     {
-        std::shared_ptr<arrow::io::FileOutputStream> file_output_stream;
-        arrow::io::FileOutputStream::Open(newName, &file_output_stream);
+        std::shared_ptr<arrow::io::BufferOutputStream> output_stream;
+        arrow::io::BufferOutputStream::Create(1024 * 1024 * 256, ::arrow::default_memory_pool(), &output_stream);
+        arrow::Status status;
         double t1 = gettime();
-        parquet::arrow::WriteTable(*table, ::arrow::default_memory_pool(),
-           file_output_stream, table->num_rows(), props);
+        status = parquet::arrow::WriteTable(*table, ::arrow::default_memory_pool(),
+           output_stream, table->num_rows(), props);
         double t2 = gettime();
         totalTime += (t2-t1);
+        if (!status.ok()) {
+            std::cerr << "Failed to write parquet" << std::endl;
+        }
+
+        std::shared_ptr<arrow::Buffer> buffer;
+        output_stream->Finish(&buffer);
+
+        std::unique_ptr<parquet::arrow::FileReader> reader;
+        parquet::arrow::FileReaderBuilder builder;
+        builder.Open(std::make_shared<arrow::io::BufferReader>(buffer));
+        builder.properties(parquet::default_arrow_reader_properties())->Build(&reader);
+    
+        t1 = gettime();
+        std::shared_ptr<arrow::Table> out;
+        status = reader->ReadTable(&out);
+        t2 = gettime();
+        totalDecompressTime += (t2-t1);
+        if (!status.ok()) {
+            std::cerr << "Failed to read parquet " << status.message() << std::endl;
+        }
+
+        output_stream->Tell(&sz);
     }
-    std::cout << newName << ": " << (totalTime / numRuns) << std::endl;
+    std::cout << newName << ": " << (totalTime / numRuns) << " " << (totalDecompressTime / numRuns) << " " << sz << std::endl;
 }
 
 void printHelp()
@@ -302,10 +326,10 @@ parquet::Compression::type GetCompressionTypeFromString(const char *compressionN
     {
         return parquet::Compression::UNCOMPRESSED;
     }
-    else if (strcmp(compressionName, "zfp") == 0)
+    /*else if (strcmp(compressionName, "zfp") == 0)
     {
         return parquet::Compression::ZFP;
-    }
+    }*/
     else
     {
         handleInvalidArg();
@@ -505,7 +529,7 @@ int main(int argc, char *argv[]) {
         }
         for (const auto &job : testJobs)
         {
-            runTest(fileName, table, job.compression, job.encoding, job.compressionLevel, job.precision, 2U);
+            runTest(fileName, table, job.compression, job.encoding, job.compressionLevel, job.precision, 8U);
         }
     }
 

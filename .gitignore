@@ -2,3 +2,4 @@
 *.swp
 parquet_test
 scripts/
+optimize_byte_stream_split/prog

@@ -3,11 +3,11 @@
 ALL_OBJ=main.o
 
 parquet_test: $(ALL_OBJ)
-	g++ $(ALL_OBJ) -O2 -g -std=c++14 -larrow -lparquet -o parquet_test
+	g++ $(ALL_OBJ) -O3 -std=c++14 -larrow -lparquet -o parquet_test
 
 
 main.o: main.cpp
-	g++ main.cpp -O2 -c -std=c++14 -o main.o
+	g++ main.cpp -O3 -c -std=c++14 -o main.o
 
 clean:
 	rm *.o
