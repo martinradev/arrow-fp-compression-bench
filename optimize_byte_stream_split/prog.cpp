@@ -264,11 +264,11 @@ void decode_fast_double(const uint8_t *input_data, size_t num_elements, uint8_t 
     const size_t num_blocks = size / block_size;
 
     // Handle suffix first.
-    const size_t num_processed_elements = (num_blocks * block_size) / sizeof(float);
+    const size_t num_processed_elements = (num_blocks * block_size) / sizeof(double);
     for (size_t i = num_processed_elements; i < num_elements; ++i) {
-        for (size_t j = 0; j < sizeof(float); ++j) {
+        for (size_t j = 0; j < sizeof(double); ++j) {
             const uint8_t value = input_data[num_elements * j + i];
-            output_data[i * sizeof(float) + j] = value;
+            output_data[i * sizeof(double) + j] = value;
         }
     }
 
