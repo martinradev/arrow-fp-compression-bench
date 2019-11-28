@@ -48,17 +48,28 @@ static void flush_buf(const uint8_t *data, uint64_t num_bytes) {
 }
 
 template<typename T>
-void encode_fast(const T *input_data, size_t num_elements, uint8_t *output_data) {
-    const size_t numBytesPerStream = num_elements;
-    __m128i *output_data_simd = (__m128i*)output_data;
+void encode_fast(const T *input_data, size_t num_elements, const size_t read_stride, const size_t write_stride, uint8_t *output_data) {
     size_t size = num_elements * sizeof(T);
     const __m128i* input_data_simd = (const __m128i*)input_data;
+    const uint8_t *input_data_u8 = (const uint8_t*)input_data;
 
     const __m128i mask_16_bits = _mm_set_epi32(0xFFFFU, 0xFFFFU, 0xFFFFU, 0xFFFFU);
     const __m128i mask_8_bits = _mm_set_epi16(0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU, 0xFFU);
 
     const size_t block_size = sizeof(__m128i) * sizeof(T);
     const size_t num_blocks = size / block_size;
+
+    // Handle suffix first to catch potential out-of-bounds overwrites in the simd implementation.
+    const size_t offset_element = (num_blocks * block_size) / sizeof(T);
+    const size_t write_multi = write_stride != 1U ? 1U : sizeof(T);
+    const size_t read_multi = read_stride != 1U ? 1U : sizeof(T);
+    using UnsignedType = typename TypeConverter<T>::UnsignedType;
+    for (size_t i = offset_element; i < num_elements; ++i) {
+        for (size_t j = 0; j < sizeof(T); ++j) {
+            output_data[j * write_stride + i * write_multi] = input_data_u8[j * read_stride + i * read_multi];
+        }
+    }
+    
     for (size_t k = 0; k < num_blocks; ++k) {
         size_t idx16b = k * sizeof(T);
         __m128i v[sizeof(T)];
@@ -67,12 +78,12 @@ void encode_fast(const T *input_data, size_t num_elements, uint8_t *output_data)
         if (std::is_same<float, T>::value) {
             // Handle single-precision data.
             for (size_t i = 0; i < sizeof(T); ++i) {
-                source[i] = _mm_loadu_si128(&input_data_simd[idx16b+i]);
+                source[i] = _mm_loadu_si128(&input_data_simd[idx16b+i*read_stride]);
             }
         } else {
             // Handle double-precision data.
             for (size_t i = 0; i < sizeof(T); ++i) {
-                v[i] = _mm_loadu_si128(&input_data_simd[idx16b+i]);
+                v[i] = _mm_loadu_si128(&input_data_simd[idx16b+i*read_stride]);
             }
         }
 
@@ -118,19 +129,10 @@ void encode_fast(const T *input_data, size_t num_elements, uint8_t *output_data)
             }
 
             for (size_t j = 0; j < 4; ++j) {
-                _mm_storeu_si128(output_data_simd + (numBytesPerStream/16UL)*(j + it*4) + idx16b/sizeof(T), packed_blocks[j]);
+                uint8_t *out_addr = output_data + write_stride * (j + it * 4) + idx16b*(16U/sizeof(T));
+                printf("%p\n", out_addr);
+                _mm_storeu_si128((__m128i*)out_addr, packed_blocks[j]);
             }
-        }
-    }
-
-    // Handle suffix
-    const size_t offset_element = (num_blocks * block_size) / sizeof(T);
-    using UnsignedType = typename TypeConverter<T>::UnsignedType;
-    for (size_t i = offset_element; i < num_elements; ++i) {
-        UnsignedType value;
-        memcpy(&value, &input_data[i], sizeof(T));
-        for (size_t j = 0; j < sizeof(T); ++j) {
-            output_data[j * num_elements + i] = (value >> (8U * j)) & 0xFFU;
         }
     }
 }
@@ -245,6 +247,20 @@ void encode_simple_no_simd(const T *input_data, size_t num_elements, uint8_t *ou
 }
 
 template<typename T>
+void decode_simple(const T *input_data, size_t num_elements, uint8_t *output_data)
+{
+    const uint8_t *input_data_u8 = (const uint8_t*)input_data;
+    using UnsignedType = typename TypeConverter<T>::UnsignedType;
+    for (size_t i = 0; i < num_elements; ++i) {
+        UnsignedType value = 0;
+        for (size_t k = 0; k < sizeof(T); ++k) {
+            value |= ((UnsignedType)(input_data_u8[k * num_elements + i])) << (8U * k);
+        }
+        memcpy(&output_data[i*sizeof(T)], &value, sizeof(value));
+    }
+}
+
+template<typename T>
 void test_encode_typed() {
     const size_t num_elements = 1024 * 1024 + 13;
     using UnsignedType = typename TypeConverter<T>::UnsignedType;
@@ -253,11 +269,11 @@ void test_encode_typed() {
     UnsignedType *output2 = (UnsignedType*)malloc(num_elements * sizeof(T));
     srand(1337);
     uint8_t *inputU8 = (uint8_t*)input;
-    for (size_t i = 0; i < num_elements * sizeof(T); ++i) {
-        inputU8[i] = i & 0xFF;
+    for (size_t i = 0; i < num_elements; ++i) {
+        input[i] = rand();
     }
     encode_simple<T>((const T*)input, num_elements, (uint8_t*)output1);
-    encode_fast<T>((const T*)input, num_elements, (uint8_t*)output2);
+    encode_fast<T>((const T*)input, num_elements, 1U, num_elements, (uint8_t*)output2);
     if (memcmp(output1, output2, num_elements) == 0) {
         printf("Success\n");
     } else {
@@ -270,7 +286,40 @@ void test_encode() {
     test_encode_typed<double>(); 
 }
 
+template<typename T>
+void test_decode_typed() {
+    const size_t num_elements = 16;
+    using UnsignedType = typename TypeConverter<T>::UnsignedType;
+    UnsignedType *input = (UnsignedType*)malloc(num_elements * sizeof(T));
+    UnsignedType *output1 = (UnsignedType*)malloc(num_elements * sizeof(T));
+    UnsignedType *output2 = (UnsignedType*)malloc(num_elements * sizeof(T));
+    srand(1337);
+    uint8_t *inputU8 = (uint8_t*)input;
+    for (size_t i = 0; i < num_elements; ++i) {
+        input[i] = rand();
+    }
+    decode_simple<T>((const T*)input, num_elements, (uint8_t*)output1);
+    encode_fast<T>((const T*)input, num_elements, num_elements, 1U, (uint8_t*)output2);
+    /*for (size_t i = 0; i < num_elements * sizeof(T); ++i) {
+        printf("%x ", ((uint8_t*)input)[i]);        
+    }
+    printf("\n");
+    for (size_t i = 0; i < num_elements * sizeof(T); ++i) {
+        printf("%x %x\n", ((uint8_t*)output1)[i], ((uint8_t*)output2)[i]);        
+    }*/
+    if (memcmp(output1, output2, num_elements) == 0) {
+        printf("Success\n");
+    } else {
+        printf("Fail\n");
+    }
+}
+
+void test_decode() {
+    test_decode_typed<float>();
+}
+
 void benchmark_encode_float() {
+    printf("Benchmark float\n");
     const size_t buf_size = 1024UL * 1024UL * 32UL;
     uint8_t *buf = (uint8_t*)malloc(buf_size);
     uint8_t *output_buf = (uint8_t*)malloc(buf_size);
@@ -295,7 +344,7 @@ void benchmark_encode_float() {
                 encode(buf, buf_size/4UL, output_buf);
                 break;
                 case 1:
-                encode_fast((const float*)buf, buf_size/4UL, output_buf);
+                encode_fast((const float*)buf, buf_size/4UL, 1U, buf_size/4UL, output_buf);
                 break;
                 case 2:
                 memcpy(output_buf, buf, buf_size);
@@ -326,6 +375,7 @@ void benchmark_encode_float() {
 }
 
 void benchmark_encode_double() {
+    printf("Benchmark double\n");
     const size_t buf_size = 1024UL * 1024UL * 32UL;
     uint8_t *buf = (uint8_t*)malloc(buf_size);
     uint8_t *output_buf = (uint8_t*)malloc(buf_size);
@@ -347,7 +397,7 @@ void benchmark_encode_double() {
             t1 = gettime();
             switch(k) {
                 case 0:
-                encode_fast((const double*)buf, buf_size/8UL, output_buf);
+                encode_fast((const double*)buf, buf_size/8UL, 1U, buf_size/8UL, output_buf);
                 break;
                 case 1:
                 memcpy(output_buf, buf, buf_size);
@@ -384,6 +434,7 @@ void benchmark_decode() {
 int main() {
     
     //test_encode();
-    benchmark_encode_double();
+    test_decode();
+    //benchmark_encode_double();
     return 0;
 }
