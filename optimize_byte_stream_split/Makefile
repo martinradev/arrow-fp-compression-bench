@@ -1,5 +1,5 @@
-prog: prog.c
-	gcc prog.c -m64 -march=native -O3 -o prog
+prog: prog.cpp
+	g++ prog.cpp -march=sandybridge -std=c++11 -O3 -o prog
 
 clean:
 	rm prog
