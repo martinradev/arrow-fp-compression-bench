@@ -1,0 +1,19 @@
+Sandy Bridge 3930K:
+===================
+Benchmark float
+encode_SIMD_shuffle: 10.251462 GiB/s
+encode_SIMD_unpack: 10.677220 GiB/s
+encode_simple: 10.200240 GiB/s
+encode_simple_prevent_simd: 2.970176 GiB/s
+memcpy: 11.646387 GiB/s
+decode_simple: 11.543701 GiB/s
+decode_simple_prevent_simd: 5.966233 GiB/s
+decode_SIMD_unpack: 12.209349 GiB/s
+Benchmark double
+encode_SIMD_unpack: 9.019851 GiB/s
+encode_simple: 6.227207 GiB/s
+encode_simple_prevent_simd: 1.650269 GiB/s
+memcpy: 11.785345 GiB/s
+decode_simple: 4.574822 GiB/s
+decode_simple_prevent_simd: 2.594383 GiB/s
+
