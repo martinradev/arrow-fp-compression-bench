@@ -47,8 +47,9 @@ static void flush_buf(const uint8_t *data, uint64_t num_bytes) {
     }
 }
 
+/********* BEGIN SIMD ENCODERS ***************/
 template<typename T>
-void encode_fast(const T *input_data, size_t num_elements, const size_t read_stride, const size_t write_stride, uint8_t *output_data) {
+void encode_fast(const T *input_data, size_t num_elements, uint8_t *output_data) {
     size_t size = num_elements * sizeof(T);
     const __m128i* input_data_simd = (const __m128i*)input_data;
     const uint8_t *input_data_u8 = (const uint8_t*)input_data;
@@ -61,15 +62,12 @@ void encode_fast(const T *input_data, size_t num_elements, const size_t read_str
 
     // Handle suffix first to catch potential out-of-bounds overwrites in the simd implementation.
     const size_t offset_element = (num_blocks * block_size) / sizeof(T);
-    const size_t write_multi = write_stride != 1U ? 1U : sizeof(T);
-    const size_t read_multi = read_stride != 1U ? 1U : sizeof(T);
-    using UnsignedType = typename TypeConverter<T>::UnsignedType;
-    for (size_t i = offset_element; i < num_elements; ++i) {
+    for (size_t i = offset_element; i < num_elements; ++i) { 
         for (size_t j = 0; j < sizeof(T); ++j) {
-            output_data[j * write_stride + i * write_multi] = input_data_u8[j * read_stride + i * read_multi];
+            output_data[j * num_elements + i] = input_data_u8[j + i * sizeof(T)];
         }
     }
-    
+
     for (size_t k = 0; k < num_blocks; ++k) {
         size_t idx16b = k * sizeof(T);
         __m128i v[sizeof(T)];
@@ -78,12 +76,12 @@ void encode_fast(const T *input_data, size_t num_elements, const size_t read_str
         if (std::is_same<float, T>::value) {
             // Handle single-precision data.
             for (size_t i = 0; i < sizeof(T); ++i) {
-                source[i] = _mm_loadu_si128(&input_data_simd[idx16b+i*read_stride]);
+                source[i] = _mm_loadu_si128(&input_data_simd[idx16b+i]);
             }
         } else {
             // Handle double-precision data.
             for (size_t i = 0; i < sizeof(T); ++i) {
-                v[i] = _mm_loadu_si128(&input_data_simd[idx16b+i*read_stride]);
+                v[i] = _mm_loadu_si128(&input_data_simd[idx16b+i]);
             }
         }
 
@@ -129,8 +127,7 @@ void encode_fast(const T *input_data, size_t num_elements, const size_t read_str
             }
 
             for (size_t j = 0; j < 4; ++j) {
-                uint8_t *out_addr = output_data + write_stride * (j + it * 4) + idx16b*(16U/sizeof(T));
-                printf("%p\n", out_addr);
+                uint8_t *out_addr = output_data + num_elements * (j + it * 4) + idx16b*(16U/sizeof(T));
                 _mm_storeu_si128((__m128i*)out_addr, packed_blocks[j]);
             }
         }
@@ -216,6 +213,78 @@ void encode(const uint8_t *input_data, size_t num_elements, uint8_t *output_data
     }
 }
 
+/********* END SIMD ENCODERS ***************/
+
+/********* BEGIN SIMD DECODERS ***************/
+void decode_fast_float(const float *input_data, size_t num_elements, uint8_t *output_data)
+{
+    size_t size = num_elements * sizeof(float);
+    const size_t block_size = sizeof(__m128i) * 4U;
+    const size_t num_blocks = size / block_size;
+    for (size_t i = 0; i < num_blocks; ++i) {
+        __m128i v[4];
+        for (size_t j = 0; j < 4; ++j) {
+            v[j] = _mm_loadu_si128((const __m128i*)&input_data[i * 4 + j * num_elements / sizeof(float)]);
+        }
+        __m128i comb[4];
+        comb[0] = _mm_unpacklo_epi8(v[0], v[2]);
+        comb[1] = _mm_unpacklo_epi8(v[1], v[3]);
+        comb[2] = _mm_unpackhi_epi8(v[0], v[2]);
+        comb[3] = _mm_unpackhi_epi8(v[1], v[3]);
+        
+        __m128i comb2[4];
+        comb2[0] = _mm_unpacklo_epi8(comb[0], comb[1]);
+        comb2[1] = _mm_unpackhi_epi8(comb[0], comb[1]);
+        comb2[2] = _mm_unpacklo_epi8(comb[2], comb[3]);
+        comb2[3] = _mm_unpackhi_epi8(comb[2], comb[3]);
+
+        for (size_t j = 0; j < 4; ++j) {
+            _mm_storeu_si128((__m128i*)(&output_data[(i * 4 + j) * 16]), comb2[j]);
+        }
+    }
+}
+
+void decode_fast_double(const double *input_data, size_t num_elements, uint8_t *output_data)
+{
+    size_t size = num_elements * sizeof(double);
+    const size_t block_size = sizeof(__m128i) * sizeof(double);
+    const size_t num_blocks = size / block_size;
+    for (size_t i = 0; i < num_blocks; ++i) {
+        __m128i v[8];
+        for (size_t j = 0; j < 8; ++j) {
+            v[j] = _mm_loadu_si128((const __m128i*)&input_data[i * 2 + j * num_elements / sizeof(double)]);
+        }
+        __m128i comb[8];
+        for (size_t j = 0; j < 4; ++j) {
+            comb[j] = _mm_unpacklo_epi8(v[j], v[j+4]);
+            comb[j+4] = _mm_unpackhi_epi8(v[j], v[j+4]);
+        }
+
+        __m128i comb2[8];
+        for (size_t j = 0; j < 2; ++j) {
+            comb2[j] = _mm_unpacklo_epi8(comb[j], comb[j+2]);
+            comb2[j+2] = _mm_unpackhi_epi8(comb[j], comb[j+2]);
+            comb2[j+4] = _mm_unpacklo_epi8(comb[j+4], comb[j+2+4]);
+            comb2[j+6] = _mm_unpackhi_epi8(comb[j+4], comb[j+2+4]);
+        }
+
+        __m128i comb3[8];
+        for (size_t j = 0; j < 4; ++j) {
+            comb3[j*2] = _mm_unpacklo_epi8(comb2[j*2], comb2[j*2+1]);
+            comb3[j*2+1] = _mm_unpackhi_epi8(comb2[j*2], comb2[j*2+1]);
+        }
+
+        for (size_t j = 0; j < 8; ++j) {
+            _mm_storeu_si128((__m128i*)(&output_data[(i * 8 + j) * 16]), comb3[j]);
+        }
+    }
+}
+
+
+/********* END SIMD DECODERS ***************/
+
+
+/********* BEGIN SCALAR ENCODERS AND DECODERS ***************/
 
 template<typename T>
 void encode_simple(const T *input_data, size_t num_elements, uint8_t *output_data)
@@ -246,6 +315,7 @@ void encode_simple_no_simd(const T *input_data, size_t num_elements, uint8_t *ou
     }
 }
 
+// The compiler actually produces very inefficient simd code for double-precision type.
 template<typename T>
 void decode_simple(const T *input_data, size_t num_elements, uint8_t *output_data)
 {
@@ -261,6 +331,25 @@ void decode_simple(const T *input_data, size_t num_elements, uint8_t *output_dat
 }
 
 template<typename T>
+void decode_simple_no_simd(const T *input_data, size_t num_elements, uint8_t *output_data) __attribute__ ((__target__ ("no-sse")));
+
+template<typename T>
+void decode_simple_no_simd(const T *input_data, size_t num_elements, uint8_t *output_data)
+{
+    const uint8_t *input_data_u8 = (const uint8_t*)input_data;
+    using UnsignedType = typename TypeConverter<T>::UnsignedType;
+    for (size_t i = 0; i < num_elements; ++i) {
+        UnsignedType value = 0;
+        for (size_t k = 0; k < sizeof(T); ++k) {
+            value |= ((UnsignedType)(input_data_u8[k * num_elements + i])) << (8U * k);
+        }
+        memcpy(&output_data[i*sizeof(T)], &value, sizeof(value));
+    }
+}
+
+/********* END SCALAR ENCODERS AND DECODERS ***************/
+
+template<typename T>
 void test_encode_typed() {
     const size_t num_elements = 1024 * 1024 + 13;
     using UnsignedType = typename TypeConverter<T>::UnsignedType;
@@ -273,7 +362,7 @@ void test_encode_typed() {
         input[i] = rand();
     }
     encode_simple<T>((const T*)input, num_elements, (uint8_t*)output1);
-    encode_fast<T>((const T*)input, num_elements, 1U, num_elements, (uint8_t*)output2);
+    encode_fast<T>((const T*)input, num_elements, (uint8_t*)output2);
     if (memcmp(output1, output2, num_elements) == 0) {
         printf("Success\n");
     } else {
@@ -288,24 +377,32 @@ void test_encode() {
 
 template<typename T>
 void test_decode_typed() {
-    const size_t num_elements = 16;
+    const size_t num_elements = 1024 * 1024;
     using UnsignedType = typename TypeConverter<T>::UnsignedType;
     UnsignedType *input = (UnsignedType*)malloc(num_elements * sizeof(T));
     UnsignedType *output1 = (UnsignedType*)malloc(num_elements * sizeof(T));
     UnsignedType *output2 = (UnsignedType*)malloc(num_elements * sizeof(T));
     srand(1337);
     uint8_t *inputU8 = (uint8_t*)input;
-    for (size_t i = 0; i < num_elements; ++i) {
-        input[i] = rand();
+    for (size_t i = 0; i < num_elements * sizeof(T); ++i) {
+        inputU8[i] = rand();
     }
     decode_simple<T>((const T*)input, num_elements, (uint8_t*)output1);
-    encode_fast<T>((const T*)input, num_elements, num_elements, 1U, (uint8_t*)output2);
-    /*for (size_t i = 0; i < num_elements * sizeof(T); ++i) {
-        printf("%x ", ((uint8_t*)input)[i]);        
+    if (std::is_same<T, float>::value) {
+        decode_fast_float((const float*)input, num_elements, (uint8_t*)output2);
+    } else {
+        decode_fast_double((const double*)input, num_elements, (uint8_t*)output2);
+    }
+    /*for (size_t i = 0; i < num_elements * sizeof(T); ) {
+        for (size_t j = 0; j < 16; ++j) {
+            printf("%x ", ((uint8_t*)input)[i + j]);        
+        }
+        printf("\n");
+        i += 16;
     }
     printf("\n");
     for (size_t i = 0; i < num_elements * sizeof(T); ++i) {
-        printf("%x %x\n", ((uint8_t*)output1)[i], ((uint8_t*)output2)[i]);        
+        printf("%d %x %x\n", i, ((uint8_t*)output1)[i], ((uint8_t*)output2)[i]);        
     }*/
     if (memcmp(output1, output2, num_elements) == 0) {
         printf("Success\n");
@@ -316,6 +413,7 @@ void test_decode_typed() {
 
 void test_decode() {
     test_decode_typed<float>();
+    test_decode_typed<double>();
 }
 
 void benchmark_encode_float() {
@@ -325,11 +423,12 @@ void benchmark_encode_float() {
     uint8_t *output_buf = (uint8_t*)malloc(buf_size);
     for (size_t i = 0; i < buf_size; ++i) {
         buf[i] = (uint8_t)i;
+        output_buf[i] = 0;
     }
 
     const size_t cnt = 128;
     double total = 0;
-    const size_t num_cases = 5;
+    const size_t num_cases = 8;
     double res[num_cases];
     for (size_t k = 0; k < num_cases; ++k) {
         total = 0;
@@ -344,7 +443,7 @@ void benchmark_encode_float() {
                 encode(buf, buf_size/4UL, output_buf);
                 break;
                 case 1:
-                encode_fast((const float*)buf, buf_size/4UL, 1U, buf_size/4UL, output_buf);
+                encode_fast((const float*)buf, buf_size/4UL, output_buf);
                 break;
                 case 2:
                 memcpy(output_buf, buf, buf_size);
@@ -354,6 +453,15 @@ void benchmark_encode_float() {
                 break;
                 case 4:
                 encode_simple_no_simd<float>((const float*)buf, buf_size/4UL, (uint8_t*)output_buf);
+                break;
+                case 5:
+                decode_simple<float>((const float*)buf, buf_size/4UL, (uint8_t*)output_buf);
+                break;
+                case 6:
+                decode_simple_no_simd<float>((const float*)buf, buf_size/4UL, (uint8_t*)output_buf);
+                break;
+                case 7:
+                decode_fast_float((const float*)buf, buf_size/4UL, (uint8_t*)output_buf);
                 break;
                 default:
                 printf("Error\n");
@@ -367,11 +475,14 @@ void benchmark_encode_float() {
         res[k] =  ((double)(2UL * buf_size) / (1024UL * 1024UL * 1024UL)) / total;
     }
 
-    printf("SIMD shuffle: %lf GiB/s\n", res[0]);
-    printf("SIMD unpack: %lf GiB/s\n", res[1]);
-    printf("simple: %lf GiB/s\n", res[3]);
-    printf("simple_no_simd: %lf GiB/s\n", res[4]);
+    printf("encode_SIMD_shuffle: %lf GiB/s\n", res[0]);
+    printf("encode_SIMD_unpack: %lf GiB/s\n", res[1]);
+    printf("encode_simple: %lf GiB/s\n", res[3]);
+    printf("encode_simple_prevent_simd: %lf GiB/s\n", res[4]);
     printf("memcpy: %lf GiB/s\n", res[2]);
+    printf("decode_simple: %lf GiB/s\n", res[5]);
+    printf("decode_simple_prevent_simd: %lf GiB/s\n", res[6]);
+    printf("decode_SIMD_unpack: %lf GiB/s\n", res[7]);
 }
 
 void benchmark_encode_double() {
@@ -381,11 +492,12 @@ void benchmark_encode_double() {
     uint8_t *output_buf = (uint8_t*)malloc(buf_size);
     for (size_t i = 0; i < buf_size; ++i) {
         buf[i] = (uint8_t)i;
+        output_buf[i] = 0;
     }
 
     const size_t cnt = 128;
     double total = 0;
-    const size_t num_cases = 4;
+    const size_t num_cases = 7;
     double res[num_cases];
     for (size_t k = 0; k < num_cases; ++k) {
         total = 0;
@@ -397,7 +509,7 @@ void benchmark_encode_double() {
             t1 = gettime();
             switch(k) {
                 case 0:
-                encode_fast((const double*)buf, buf_size/8UL, 1U, buf_size/8UL, output_buf);
+                encode_fast((const double*)buf, buf_size/8UL, output_buf);
                 break;
                 case 1:
                 memcpy(output_buf, buf, buf_size);
@@ -407,6 +519,15 @@ void benchmark_encode_double() {
                 break;
                 case 3:
                 encode_simple_no_simd<double>((const double*)buf, buf_size/8UL, (uint8_t*)output_buf);
+                break;
+                case 4:
+                decode_simple<double>((const double*)buf, buf_size/8UL, (uint8_t*)output_buf);
+                break;
+                case 5:
+                decode_simple_no_simd<double>((const double*)buf, buf_size/8UL, (uint8_t*)output_buf);
+                break;
+                case 6:
+                decode_fast_double((const double*)buf, buf_size/8UL, (uint8_t*)output_buf);
                 break;
                 default:
                 printf("Error\n");
@@ -420,10 +541,13 @@ void benchmark_encode_double() {
         res[k] =  ((double)(2UL * buf_size) / (1024UL * 1024UL * 1024UL)) / total;
     }
 
-    printf("SIMD unpack: %lf GiB/s\n", res[0]);
-    printf("simple: %lf GiB/s\n", res[2]);
-    printf("simple_no_simd: %lf GiB/s\n", res[3]);
+    printf("encode_SIMD_unpack: %lf GiB/s\n", res[0]);
+    printf("encode_simple: %lf GiB/s\n", res[2]);
+    printf("encode_simple_prevent_simd: %lf GiB/s\n", res[3]);
     printf("memcpy: %lf GiB/s\n", res[1]);
+    printf("decode_simple: %lf GiB/s\n", res[4]);
+    printf("decode_simple_prevent_simd: %lf GiB/s\n", res[5]);
+    printf("decode_simd_unpack: %lf GiB/s\n", res[6]);
 }
 
 
@@ -432,9 +556,9 @@ void benchmark_decode() {
 }
 
 int main() {
-    
-    //test_encode();
+    test_encode();
     test_decode();
-    //benchmark_encode_double();
+    benchmark_encode_float();
+    benchmark_encode_double();
     return 0;
 }
