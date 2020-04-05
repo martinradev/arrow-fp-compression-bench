@@ -168,18 +168,6 @@ void runTest(const std::string &fileName,
         case parquet::Encoding::type::BYTE_STREAM_SPLIT:
             encoding += "fp";
             break;
-        case parquet::Encoding::type::BYTE_STREAM_SPLIT_XOR:
-            encoding += "fp_xor";
-            break;
-        case parquet::Encoding::type::BYTE_STREAM_SPLIT_BYTE_RLE:
-            encoding += "fp_rle";
-            break;
-        case parquet::Encoding::type::BYTE_STREAM_SPLIT_COMPONENT:
-            encoding += "fp_comp";
-            break;
-        case parquet::Encoding::type::BYTE_STREAM_SPLIT_RYANBLUE_RLE:
-            encoding += "fp_rb";
-            break;
         case parquet::Encoding::type::RLE_DICTIONARY:
             encoding += "dict";
             break;
@@ -195,7 +183,7 @@ void runTest(const std::string &fileName,
     newName += ".pre" + std::to_string(lossyCompressionPrecision);
 
     parquet::WriterProperties::Builder props_builder;
-    props_builder.data_pagesize(1024 * 1024 * 4);
+    props_builder.data_pagesize(1024 * 1024 * 16);
 
     const auto &schema = table->schema();
     const auto &fields = schema->fields();
@@ -238,7 +226,7 @@ void runTest(const std::string &fileName,
         double t2 = gettime();
         totalTime += (t2-t1);
         if (!status.ok()) {
-            std::cerr << "Failed to write parquet" << std::endl;
+            std::cerr << "Failed to write parquet" << status.message() << std::endl;
         }
 
         std::shared_ptr<arrow::Buffer> buffer;
@@ -258,7 +246,7 @@ void runTest(const std::string &fileName,
             std::cerr << "Failed to read parquet " << status.message() << std::endl;
         }
 
-        output_stream->Tell(&sz);
+        sz = *output_stream->Tell();
     }
     std::cout << newName << ": " << (totalTime / numRuns) << " " << (totalDecompressTime / numRuns) << " " << sz << std::endl;
 }
@@ -349,22 +337,6 @@ parquet::Encoding::type GetEncodingTypeFromString(const char *encodingName)
     else if (strcmp(encodingName, "split") == 0)
     {
         return parquet::Encoding::type::BYTE_STREAM_SPLIT;
-    }
-    else if (strcmp(encodingName, "split_xor") == 0)
-    {
-        return parquet::Encoding::type::BYTE_STREAM_SPLIT_XOR;
-    }
-    else if (strcmp(encodingName, "split_component") == 0)
-    {
-        return parquet::Encoding::type::BYTE_STREAM_SPLIT_COMPONENT;
-    }
-    else if (strcmp(encodingName, "split_rle") == 0)
-    {
-        return parquet::Encoding::type::BYTE_STREAM_SPLIT_BYTE_RLE;
-    }
-    else if (strcmp(encodingName, "split_ryanblue_rle") == 0)
-    {
-        return parquet::Encoding::type::BYTE_STREAM_SPLIT_RYANBLUE_RLE;
     }
     else
     {
@@ -529,7 +501,7 @@ int main(int argc, char *argv[]) {
         }
         for (const auto &job : testJobs)
         {
-            runTest(fileName, table, job.compression, job.encoding, job.compressionLevel, job.precision, 8U);
+            runTest(fileName, table, job.compression, job.encoding, job.compressionLevel, job.precision, 4U);
         }
     }
 
