@@ -1,3 +1,7 @@
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+
 f = open("last.txt", "r").read()
 lines = f.split("\n")
 lines = lines[:len(lines)-1]
@@ -14,9 +18,9 @@ def get_name(line):
 
 for u in lines:
     name = get_name(u)
-    compression_ratio[name] = [0 for u in range(5)]
-    write_throughput[name] = [0 for u in range(5)]
-    read_throughput[name] = [0 for u in range(5)]
+    compression_ratio[name] = [0 for u in range(6)]
+    write_throughput[name] = [0 for u in range(6)]
+    read_throughput[name] = [0 for u in range(6)]
 
 for u in lines:
     name = get_name(u)
@@ -44,8 +48,10 @@ for u in lines:
         i = 2
     elif "ZSTD.dict" in u:
         i = 3
-    elif "ZSTD.fp" in u:
+    elif "ZSTD.fp." in u:
         i = 4
+    elif "ZSTD.fp_simd." in u:
+        i = 5
     else:
         print("Unknown name: {}".format(name))
         assert(False)
@@ -71,20 +77,20 @@ def transform(val):
 print("Ratio")
 for key in sorted(compression_ratio.keys()):
     val = transform(compression_ratio[key])
-    line = "\\textbf{" + key + "}" + " & {} & {} & {} & {} & {} \\\\".format(val[0], val[1], val[2], val[3], val[4])
+    line = "\\textbf{" + key + "}" + " & {} & {} & {} & {} & {}\\\\".format(val[0], val[1], val[2], val[3], val[4])
     print(line)
 
 print()
 print("Write throughput")
 for key in sorted(write_throughput.keys()):
     val = transform(write_throughput[key])
-    line = "\\textbf{" + key + "}" + " & {} & {} & {} & {} & {} \\\\".format(val[0], val[1], val[2], val[3], val[4])
+    line = "\\textbf{" + key + "}" + " & {} & {} & {} & {} & {} & {} \\\\".format(val[0], val[1], val[2], val[3], val[4], val[5])
     print(line)
 
 print()
 print("Read throughput")
 for key in sorted(read_throughput.keys()):
     val = transform(read_throughput[key])
-    line = "\\textbf{" + key + "}" + " & {} & {} & {} & {} & {} \\\\".format(val[0], val[1], val[2], val[3], val[4])
+    line = "\\textbf{" + key + "}" + " & {} & {} & {} & {} & {} & {} \\\\".format(val[0], val[1], val[2], val[3], val[4], val[5])
     print(line)
  

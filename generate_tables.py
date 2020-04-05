@@ -2,10 +2,11 @@ import sys
 from pytablewriter import MarkdownTableWriter
 
 entries = []
-f = open("log.txt", "r")
+f = open("last_simd.txt", "r")
 for line in f:
     tokens = line[:-1].split(" ") 
-    sz = int(tokens[2])
+    sz = int(tokens[3])
+    t_dec = float(tokens[2])
     t = float(tokens[1])
     name = tokens[0].split("/")
     name = name[len(name)-1]
@@ -59,6 +60,8 @@ comb = [("gzip", "plain", "gzip"), ("dictionary + gzip", "dictionary", "gzip"),
         ("byte_stream_split + zstd", "split", "zstd"), ("byte_stream_split_xor + zstd", "split+xor", "zstd"),
         ("byte_stream_split_component + zstd", "split component", "zstd"),
         ("byte_stream_split_rle + zstd", "split+rle", "zstd")]
+
+comb = [("byte_stream_split + zstd", "split", "zstd")]
 
 best = {}
 best2 = {}
