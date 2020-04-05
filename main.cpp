@@ -30,13 +30,16 @@ inline double gettime() {
 // Reads a parquet file and returns an arrow::Table object.
 auto readParquetFile(const std::string &fname)
 {
-    std::shared_ptr<arrow::io::ReadableFile> infile;
-    PARQUET_THROW_NOT_OK(arrow::io::ReadableFile::Open(
-      fname, arrow::default_memory_pool(), &infile));
+    arrow::Result<std::shared_ptr<arrow::io::ReadableFile> > infile = arrow::io::ReadableFile::Open(
+      fname, arrow::default_memory_pool());
+    if (!infile.ok()) {
+        std::cerr << "Couldn't open file " << fname << std::endl;
+        exit(-1);
+    }
 
     std::unique_ptr<parquet::arrow::FileReader> reader;
     PARQUET_THROW_NOT_OK(
-          parquet::arrow::OpenFile(infile, arrow::default_memory_pool(), &reader));
+          parquet::arrow::OpenFile(*infile, arrow::default_memory_pool(), &reader));
     std::shared_ptr<arrow::Table> table;
     PARQUET_THROW_NOT_OK(reader->ReadTable(&table));
 
@@ -217,24 +220,27 @@ void runTest(const std::string &fileName,
     int64_t sz;
     for (size_t i = 0; i < numRuns; ++i)
     {
-        std::shared_ptr<arrow::io::BufferOutputStream> output_stream;
-        arrow::io::BufferOutputStream::Create(1024 * 1024 * 256, ::arrow::default_memory_pool(), &output_stream);
+        arrow::Result<std::shared_ptr<arrow::io::BufferOutputStream>> output_stream =
+            arrow::io::BufferOutputStream::Create(1024 * 1024 * 256, ::arrow::default_memory_pool());
+        if (!output_stream.ok()) {
+            std::cerr << "Couldn't create a BufferOutputStream" << std::endl;
+            exit(-1);
+        }
         arrow::Status status;
         double t1 = gettime();
         status = parquet::arrow::WriteTable(*table, ::arrow::default_memory_pool(),
-           output_stream, table->num_rows(), props);
+           *output_stream, table->num_rows(), props);
         double t2 = gettime();
         totalTime += (t2-t1);
         if (!status.ok()) {
             std::cerr << "Failed to write parquet" << status.message() << std::endl;
         }
 
-        std::shared_ptr<arrow::Buffer> buffer;
-        output_stream->Finish(&buffer);
+        arrow::Result<std::shared_ptr<arrow::Buffer> > buffer = (*output_stream)->Finish();
 
         std::unique_ptr<parquet::arrow::FileReader> reader;
         parquet::arrow::FileReaderBuilder builder;
-        builder.Open(std::make_shared<arrow::io::BufferReader>(buffer));
+        builder.Open(std::make_shared<arrow::io::BufferReader>(*buffer));
         builder.properties(parquet::default_arrow_reader_properties())->Build(&reader);
     
         t1 = gettime();
@@ -246,7 +252,8 @@ void runTest(const std::string &fileName,
             std::cerr << "Failed to read parquet " << status.message() << std::endl;
         }
 
-        sz = *output_stream->Tell();
+        arrow::Result<int64_t> res_sz = (*output_stream)->Tell();
+        sz = *res_sz;
     }
     std::cout << newName << ": " << (totalTime / numRuns) << " " << (totalDecompressTime / numRuns) << " " << sz << std::endl;
 }
