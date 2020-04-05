@@ -221,7 +221,7 @@ void runTest(const std::string &fileName,
     for (size_t i = 0; i < numRuns; ++i)
     {
         arrow::Result<std::shared_ptr<arrow::io::BufferOutputStream>> output_stream =
-            arrow::io::BufferOutputStream::Create(1024 * 1024 * 256, ::arrow::default_memory_pool());
+            arrow::io::BufferOutputStream::Create(1024 * 1024 * 1024, ::arrow::default_memory_pool());
         if (!output_stream.ok()) {
             std::cerr << "Couldn't create a BufferOutputStream" << std::endl;
             exit(-1);
@@ -251,11 +251,18 @@ void runTest(const std::string &fileName,
         if (!status.ok()) {
             std::cerr << "Failed to read parquet " << status.message() << std::endl;
         }
+        if (!table->Equals(*out, false)) {
+            std::cerr << "Table after decompression differs" << std::endl;
+        }
 
         arrow::Result<int64_t> res_sz = (*output_stream)->Tell();
         sz = *res_sz;
     }
-    std::cout << newName << ": " << (totalTime / numRuns) << " " << (totalDecompressTime / numRuns) << " " << sz << std::endl;
+    double avg_compress_time = totalTime / numRuns;
+    double avg_decompress_time = totalDecompressTime / numRuns;
+    unsigned long compress_mbs = (sz / (1024 * 1024)) / avg_compress_time;
+    unsigned long decompress_mbs = (sz / (1024 * 1024)) / avg_decompress_time;
+    std::cout << newName << ": " << avg_compress_time << " " << avg_decompress_time << " " << sz << " " << compress_mbs << " " << decompress_mbs << std::endl;
 }
 
 void printHelp()
@@ -508,7 +515,7 @@ int main(int argc, char *argv[]) {
         }
         for (const auto &job : testJobs)
         {
-            runTest(fileName, table, job.compression, job.encoding, job.compressionLevel, job.precision, 4U);
+            runTest(fileName, table, job.compression, job.encoding, job.compressionLevel, job.precision, 16U);
         }
     }
 
