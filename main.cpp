@@ -12,13 +12,36 @@
 #include <parquet/file_reader.h>
 
 #include <unordered_map>
+#include <unordered_set>
 #include <fstream>
 #include <cstring>
+#include <tuple>
 #include <sys/time.h>
 #include <vector>
+#include <libgen.h>
 
 namespace
 {
+
+struct TestResult {
+    std::string file_name;
+    std::string compression_name;
+    std::string encoding_name;
+    int32_t compression_level;
+    uint64_t original_size;
+    uint64_t compressed_size;
+    double write_time_in_s;
+    double read_time_in_s;
+};
+
+void print_result(const TestResult &result) {
+    const double compression_ratio = (double)result.original_size / result.compressed_size;
+    const double compression_speed = ((double)result.original_size / (1024*1024)) / result.write_time_in_s;
+    const double decompression_speed = ((double)result.original_size / (1024*1024)) / result.read_time_in_s;
+    std::cout << result.file_name << " " << result.compression_name << " "
+              << result.encoding_name << " " << result.compression_level << " "
+              << compression_ratio << " " << compression_speed << " " << decompression_speed << std::endl;
+}
 
 inline double gettime() {
     struct timespec ts = {0};
@@ -27,9 +50,8 @@ inline double gettime() {
     return (double)ts.tv_sec + (double)ts.tv_nsec / 1000000000.0;
 }
 
-
 // Reads a parquet file and returns an arrow::Table object.
-auto readParquetFile(const std::string &fname, uint64_t &file_size)
+auto readParquetFile(const std::string &fname)
 {
     arrow::Result<std::shared_ptr<arrow::io::ReadableFile> > infile = arrow::io::ReadableFile::Open(
       fname, arrow::default_memory_pool());
@@ -37,8 +59,6 @@ auto readParquetFile(const std::string &fname, uint64_t &file_size)
         std::cerr << "Couldn't open file " << fname << std::endl;
         exit(-1);
     }
-
-    file_size = *((*infile)->GetSize());
 
     std::unique_ptr<parquet::arrow::FileReader> reader;
     PARQUET_THROW_NOT_OK(
@@ -102,17 +122,6 @@ auto readBinaryFile(const std::string &fname)
 
     return data;
 }
-
-struct TestResult {
-    std::string file_name;
-    std::string compression_name;
-    std::string encoding_name;
-    unsigned compression_level;
-    uint64_t original_size;
-    uint64_t compressed_size;
-    double write_time_in_s;
-    double read_time_in_s;
-};
 
 // Saves the table using the specified compression algorithm, FP encoding and dictionary encoding.
 void runTest(const std::string &fileName,
@@ -219,7 +228,9 @@ void runTest(const std::string &fileName,
     unsigned long compress_mbs = (sz / (1024 * 1024)) / avg_compress_time;
     unsigned long decompress_mbs = (sz / (1024 * 1024)) / avg_decompress_time;
     //std::cout << newName << ": " << avg_compress_time << " " << avg_decompress_time << " " << sz << " " << compress_mbs << " " << decompress_mbs << std::endl;
-    result.file_name = fileName;
+    char *tmp_file_name = strdup(fileName.c_str());
+    result.file_name = std::string(basename(tmp_file_name));
+    free(tmp_file_name);
     result.original_size = original_size;
     result.compressed_size = sz;
     result.compression_name = compression_name;
@@ -467,19 +478,28 @@ int main(int argc, char *argv[]) {
         switch(file.type)
         {
             case FileType::ParquetFile:
-                table = readParquetFile(fileName, file_size);
+                table = readParquetFile(fileName);
                 break;
             case FileType::RawFloatFile:
-                table = transformRawVectorToArrowTable(readBinaryFile<float>(fileName));
+                {
+                const auto data = readBinaryFile<float>(fileName);
+                file_size = data.size() * sizeof(float);
+                table = transformRawVectorToArrowTable(data);
                 break;
+                }
             case FileType::RawDoubleFile:
-                table = transformRawVectorToArrowTable(readBinaryFile<double>(fileName));
+                {
+                const auto data = readBinaryFile<double>(fileName);
+                file_size = data.size() * sizeof(double);
+                table = transformRawVectorToArrowTable(data);
                 break;
+                }
         }
         for (const auto &job : testJobs)
         {
             TestResult result;
             runTest(fileName, table, file_size, job.compression, job.encoding, job.compressionLevel, num_rounds, result);
+            print_result(result);
         }
     }
 
