@@ -15,6 +15,7 @@
 #include <fstream>
 #include <cstring>
 #include <sys/time.h>
+#include <vector>
 
 namespace
 {
@@ -28,7 +29,7 @@ inline double gettime() {
 
 
 // Reads a parquet file and returns an arrow::Table object.
-auto readParquetFile(const std::string &fname)
+auto readParquetFile(const std::string &fname, uint64_t &file_size)
 {
     arrow::Result<std::shared_ptr<arrow::io::ReadableFile> > infile = arrow::io::ReadableFile::Open(
       fname, arrow::default_memory_pool());
@@ -36,6 +37,8 @@ auto readParquetFile(const std::string &fname)
         std::cerr << "Couldn't open file " << fname << std::endl;
         exit(-1);
     }
+
+    file_size = *((*infile)->GetSize());
 
     std::unique_ptr<parquet::arrow::FileReader> reader;
     PARQUET_THROW_NOT_OK(
@@ -100,90 +103,44 @@ auto readBinaryFile(const std::string &fname)
     return data;
 }
 
-// Prints information on how well each chunk is distributed to give an idea
-// on how repetitive the data is.
-#if 0
-void getStatistics(const std::string &fname)
-{
-    auto table = readParquetFile(fname);
-    int numColumns = table->num_columns();
-    for (int i = 0; i < numColumns; ++i)
-    {
-        const auto &col = table->column(i);
-        if (!arrow::is_floating(col->type()->id()))
-        {
-            continue;
-        }
-        const auto &data = col->data();
-        int numChunks = data->num_chunks();
-        for (int i = 0; i < numChunks; ++i)
-        {
-            const auto &chunk = data->chunk(i);
-            const auto &arr = chunk->data();
-            if (chunk->type_id() == arrow::Type::DOUBLE)
-            {
-                bool skip = true;
-                for (const auto &buf : arr->buffers)
-                {
-                    if (skip)
-                    {
-                        // Every second buffer seems to be invalid data, so let's have this hack to skip it.
-                        skip = !skip;
-                        continue;
-                    }
-                    const uint8_t *rawData = buf->data();
-                    int64_t rawDataSize = buf->size();
-                    std::unordered_map<double, uint64_t> distr;
-                    for (int j = 0; j < rawDataSize; j+=8)
-                    {
-                        double v = *reinterpret_cast<const double*>(rawData);
-                        auto it = distr.find(v);
-                        if (it == distr.end())
-                        {
-                            distr.insert(std::make_pair(v, 1));
-                        }
-                        else
-                        {
-                            it->second += 1;
-                        }
-                        rawData += 8;
-                    }
-                    std::cout << "Num unique: " << distr.size() << "/" << (rawDataSize/8) << std::endl;
-                }
-            }
-        }
-    }
-}
-#endif
+struct TestResult {
+    std::string file_name;
+    std::string compression_name;
+    std::string encoding_name;
+    unsigned compression_level;
+    uint64_t original_size;
+    uint64_t compressed_size;
+    double write_time_in_s;
+    double read_time_in_s;
+};
 
 // Saves the table using the specified compression algorithm, FP encoding and dictionary encoding.
 void runTest(const std::string &fileName,
              const std::shared_ptr<arrow::Table> &table,
+             uint64_t original_size,
              parquet::Compression::type compression,
              parquet::Encoding::type encodingType,
              int32_t compressionLevel,
-             uint8_t lossyCompressionPrecision,
-             size_t numRuns)
+             size_t numRuns,
+             TestResult &result)
 {
-    std::string encoding;
+    std::string compression_name = arrow::util::Codec::GetCodecAsString(compression);
+    std::string encoding_name;
     switch(encodingType)
     {
         case parquet::Encoding::type::BYTE_STREAM_SPLIT:
-            encoding += "fp";
+            encoding_name += "BYTE_STREAM_SPLIT";
             break;
         case parquet::Encoding::type::RLE_DICTIONARY:
-            encoding += "dict";
+            encoding_name += "RLE_DICTIONARY";
             break;
         case parquet::Encoding::type::PLAIN:
-            encoding += "no_enc";
+            encoding_name += "PLAIN";
             break;
         default:
             std::cerr << "We cannot have both dictionary and fp" << std::endl;
             exit(-1);
     }
-    std::string newName = fileName + "." + arrow::util::Codec::GetCodecAsString(compression) + "." + encoding;
-    newName += "." + std::to_string(compressionLevel);
-    newName += ".pre" + std::to_string(lossyCompressionPrecision);
 
     parquet::WriterProperties::Builder props_builder;
     props_builder.data_pagesize(1024 * 1024 * 16);
@@ -209,7 +166,6 @@ void runTest(const std::string &fileName,
             {
                 props_builder.compression_level(compressionLevel);
             }
-            //props_builder.lossy_compression_precision(field->name(), lossyCompressionPrecision);
         }
     }
     props_builder.compression(compression);
@@ -262,7 +218,15 @@ void runTest(const std::string &fileName,
     double avg_decompress_time = totalDecompressTime / numRuns;
     unsigned long compress_mbs = (sz / (1024 * 1024)) / avg_compress_time;
     unsigned long decompress_mbs = (sz / (1024 * 1024)) / avg_decompress_time;
-    std::cout << newName << ": " << avg_compress_time << " " << avg_decompress_time << " " << sz << " " << compress_mbs << " " << decompress_mbs << std::endl;
+    //std::cout << newName << ": " << avg_compress_time << " " << avg_decompress_time << " " << sz << " " << compress_mbs << " " << decompress_mbs << std::endl;
+    result.file_name = fileName;
+    result.original_size = original_size;
+    result.compressed_size = sz;
+    result.compression_name = compression_name;
+    result.encoding_name = encoding_name;
+    result.compression_level = compressionLevel;
+    result.write_time_in_s = avg_compress_time;
+    result.read_time_in_s = avg_decompress_time;
 }
 
 void printHelp()
@@ -278,22 +242,23 @@ void printHelp()
     std::cout << "  " << "Read a raw binary file of FP32 or FP64 values." << std::endl;
     std::cout << "  " << "For FP32, the file extension should be .sp." << std::endl;
     std::cout << "  " << "For FP64, the file extension should be .dp." << std::endl;
-    std::cout << " " << "-c [CODEC],[ENCODING],[COMPRESSION_LEVEL],[PRECISION] ..." << std::endl;
+    std::cout << " " << "-c [CODEC],[ENCODING],[COMPRESSION_LEVEL] ..." << std::endl;
     std::cout << "  " << "CODEC must be one of the following:" << std::endl;
     std::cout << "   " << "zstd, gzip, snappy, lz4, zfp, uncompressed" << std::endl;
     std::cout << "  " << "ENCODING must be one of the following:" << std::endl;
     std::cout << "   " << "plain, dictionary, split" << std::endl;
     std::cout << "  " << "COMPRESSION_LEVEL depends on the codec being used." << std::endl;
     std::cout << "  " << "Pass -1 if you want to use the default compression level." << std::endl;
-    std::cout << "  " << "PRECISION determines the precision for ZFP." << std::endl;
-    std::cout << "  " << "It always has to be specified and it is dependent on the data type." << std::endl;
+    std::cout << std::endl;
+    std::cout << " " << "-r K" << std::endl;
+    std::cout << "  " << "Run the compression/decompression K times." << std::endl;
     std::cout << std::endl;
     std::cout << "Example runs:" << std::endl;
     std::cout << "  " << "parquet_test -p file.parquet -c zstd,plain,6 gzip,dictionary,-1" << std::endl;
     std::cout << "   " << "Reads file.parquet. It first tries to create a new parquet file" << std::endl;
     std::cout << "   " << "for which each FP column uses ZSTD as a codec with compression level 6" << std::endl;
     std::cout << "   " << "and plain encoding." << std::endl;
-    std::cout << "  " << "parquet_test -b mydata.sp -c snappy,split,-1" << std::endl;
+    std::cout << "  " << "parquet_test -b mydata.sp -c snappy,split,-1 -r 8" << std::endl;
     std::cout << "   " << "Reads the binary file consisting of F32 values and generates a parquet file" << std::endl;
     std::cout << "   " << "using snappy as a codec with BYTE_STREAM_SPLIT encoding. The compression level" << std::endl;
     std::cout << "   " << "is the default on." << std::endl;
@@ -328,10 +293,6 @@ parquet::Compression::type GetCompressionTypeFromString(const char *compressionN
     {
         return parquet::Compression::UNCOMPRESSED;
     }
-    /*else if (strcmp(compressionName, "zfp") == 0)
-    {
-        return parquet::Compression::ZFP;
-    }*/
     else
     {
         handleInvalidArg();
@@ -363,7 +324,6 @@ struct TestParameters
     parquet::Compression::type compression;
     parquet::Encoding::type encoding;
     int32_t compressionLevel;
-    uint8_t precision;
 };
 
 enum class FileType
@@ -389,6 +349,7 @@ int main(int argc, char *argv[]) {
 
     std::vector<TestParameters> testJobs;
     std::vector<TestFile> files;
+    unsigned long num_rounds = 16;
     for (int i = 1; i < argc; ++i)
     {
         const char *arg = argv[i];
@@ -467,26 +428,27 @@ int main(int argc, char *argv[]) {
                         const int32_t compressionLevel = atoi(splitBorder+1);
                         const auto compressionType = GetCompressionTypeFromString(compression);
                         const auto encodingType = GetEncodingTypeFromString(encoding);
-                        splitBorder = strstr(splitBorder + 1, ",");
-                        if (splitBorder == nullptr)
-                        {
-                            handleInvalidArg();
-                        }
-                        splitBorder[0] = '\0';
-                        char *precisionStr = splitBorder + 1;
-                        const uint8_t precision = atoi(precisionStr);
 
                         TestParameters job =
                         {
                             compressionType,
                             encodingType,
                             compressionLevel,
-                            precision
                         };
                         testJobs.push_back(job);
+                    } else {
+                        break;
                     }
                 }
                 i = j - 1;
+            }
+            else if (strcmp(arg, "-r") == 0) {
+                i += 1;
+                if (i == argc) {
+                    handleInvalidArg();
+                    break;
+                }
+                num_rounds = strtoul(argv[i], NULL, 10);
             }
             else
             {
@@ -501,10 +463,11 @@ int main(int argc, char *argv[]) {
     {
         std::shared_ptr<arrow::Table> table;
         const auto &fileName = file.fileName;
+        uint64_t file_size;
         switch(file.type)
         {
             case FileType::ParquetFile:
-                table = readParquetFile(fileName);
+                table = readParquetFile(fileName, file_size);
                 break;
             case FileType::RawFloatFile:
                 table = transformRawVectorToArrowTable(readBinaryFile<float>(fileName));
@@ -515,7 +478,8 @@ int main(int argc, char *argv[]) {
         }
         for (const auto &job : testJobs)
         {
-            runTest(fileName, table, job.compression, job.encoding, job.compressionLevel, job.precision, 16U);
+            TestResult result;
+            runTest(fileName, table, file_size, job.compression, job.encoding, job.compressionLevel, num_rounds, result);
         }
     }
 
