@@ -131,6 +131,7 @@ void runTest(const std::string &fileName,
              parquet::Encoding::type encodingType,
              int32_t compressionLevel,
              size_t numRuns,
+             bool use_io,
              TestResult &result)
 {
     std::string compression_name = arrow::util::Codec::GetCodecAsString(compression);
@@ -183,45 +184,96 @@ void runTest(const std::string &fileName,
     double totalTime = .0;
     double totalDecompressTime = .0;
     int64_t sz;
+    std::shared_ptr<arrow::io::FileOutputStream> file_output_stream;
     for (size_t i = 0; i < numRuns; ++i)
     {
-        arrow::Result<std::shared_ptr<arrow::io::BufferOutputStream>> output_stream =
-            arrow::io::BufferOutputStream::Create(1024 * 1024 * 1024, ::arrow::default_memory_pool());
-        if (!output_stream.ok()) {
-            std::cerr << "Couldn't create a BufferOutputStream" << std::endl;
-            exit(-1);
-        }
-        arrow::Status status;
-        double t1 = gettime();
-        status = parquet::arrow::WriteTable(*table, ::arrow::default_memory_pool(),
-           *output_stream, table->num_rows(), props);
-        double t2 = gettime();
-        totalTime += (t2-t1);
-        if (!status.ok()) {
-            std::cerr << "Failed to write parquet" << status.message() << std::endl;
-        }
+        if (use_io) {
+            const std::string save_file_name = "/tmp/tmp_arrow_file.txt";
+            auto result = arrow::io::FileOutputStream::Open(save_file_name);
+            if (!result.ok()) {
+                std::cerr << "Couldn't create an output stream" << std::endl;
+                exit(-1);
+            }
+            std::shared_ptr<arrow::io::FileOutputStream> file_output_stream = *result;
+            arrow::Status status;
+            system("sync");
+            double t1 = gettime();
+            status = parquet::arrow::WriteTable(*table, ::arrow::default_memory_pool(),
+               file_output_stream, table->num_rows(), props);
+                file_output_stream->Flush();
+                file_output_stream->Close();
+            system("sync"); // this will add some latency, yes.
+            double t2 = gettime();
+            totalTime += (t2-t1);
+            if (!status.ok()) {
+                std::cerr << "Failed to write parquet" << status.message() << std::endl;
+            }
 
-        arrow::Result<std::shared_ptr<arrow::Buffer> > buffer = (*output_stream)->Finish();
+            std::unique_ptr<parquet::arrow::FileReader> reader;
+            parquet::arrow::FileReaderBuilder builder;
 
-        std::unique_ptr<parquet::arrow::FileReader> reader;
-        parquet::arrow::FileReaderBuilder builder;
-        builder.Open(std::make_shared<arrow::io::BufferReader>(*buffer));
-        builder.properties(parquet::default_arrow_reader_properties())->Build(&reader);
-    
-        t1 = gettime();
-        std::shared_ptr<arrow::Table> out;
-        status = reader->ReadTable(&out);
-        t2 = gettime();
-        totalDecompressTime += (t2-t1);
-        if (!status.ok()) {
-            std::cerr << "Failed to read parquet " << status.message() << std::endl;
-        }
-        if (!table->Equals(*out, false)) {
-            std::cerr << "Table after decompression differs" << std::endl;
-        }
+            arrow::Result<std::shared_ptr<arrow::io::ReadableFile> > infile = arrow::io::ReadableFile::Open(
+                  save_file_name, arrow::default_memory_pool());
+            builder.Open(*infile);
 
-        arrow::Result<int64_t> res_sz = (*output_stream)->Tell();
-        sz = *res_sz;
+            // Clear caches
+            system("sudo /sbin/sysctl -w vm.drop_caches=3 > /dev/null");
+
+            builder.properties(parquet::default_arrow_reader_properties())->Build(&reader);
+            t1 = gettime();
+            std::shared_ptr<arrow::Table> out;
+            status = reader->ReadTable(&out);
+            t2 = gettime();
+            totalDecompressTime += (t2-t1);
+            if (!status.ok()) {
+                std::cerr << "Failed to read parquet " << status.message() << std::endl;
+            }
+            if (!table->Equals(*out, false)) {
+                std::cerr << "Table after decompression differs" << std::endl;
+            }
+
+            std::ifstream in(save_file_name, std::ifstream::ate | std::ifstream::binary);
+            sz = in.tellg();
+
+        } else {
+            auto result =
+                arrow::io::BufferOutputStream::Create(1024 * 1024 * 1024, ::arrow::default_memory_pool());
+            auto ok = result.ok();
+            if (!ok) {
+                std::cerr << "Couldn't create an output stream" << std::endl;
+                exit(-1);
+            }
+            std::shared_ptr<arrow::io::BufferOutputStream> buf_output_stream = *result;
+            arrow::Status status;
+            double t1 = gettime();
+            status = parquet::arrow::WriteTable(*table, ::arrow::default_memory_pool(),
+               buf_output_stream, table->num_rows(), props);
+            double t2 = gettime();
+            totalTime += (t2-t1);
+            if (!status.ok()) {
+                std::cerr << "Failed to write parquet" << status.message() << std::endl;
+            }
+
+            arrow::Result<std::shared_ptr<arrow::Buffer> > buffer = buf_output_stream->Finish();
+            std::unique_ptr<parquet::arrow::FileReader> reader;
+            parquet::arrow::FileReaderBuilder builder;
+            builder.Open(std::make_shared<arrow::io::BufferReader>(*buffer));
+            builder.properties(parquet::default_arrow_reader_properties())->Build(&reader);
+            t1 = gettime();
+            std::shared_ptr<arrow::Table> out;
+            status = reader->ReadTable(&out);
+            t2 = gettime();
+            totalDecompressTime += (t2-t1);
+            if (!status.ok()) {
+                std::cerr << "Failed to read parquet " << status.message() << std::endl;
+            }
+            if (!table->Equals(*out, false)) {
+                std::cerr << "Table after decompression differs" << std::endl;
+            }
+
+            arrow::Result<int64_t> res_sz = buf_output_stream->Tell();
+            sz = *res_sz;
+        }
     }
     double avg_compress_time = totalTime / numRuns;
     double avg_decompress_time = totalDecompressTime / numRuns;
@@ -361,6 +413,7 @@ int main(int argc, char *argv[]) {
     std::vector<TestParameters> testJobs;
     std::vector<TestFile> files;
     unsigned long num_rounds = 16;
+    bool use_io = false;
     for (int i = 1; i < argc; ++i)
     {
         const char *arg = argv[i];
@@ -461,6 +514,9 @@ int main(int argc, char *argv[]) {
                 }
                 num_rounds = strtoul(argv[i], NULL, 10);
             }
+            else if (strcmp(arg, "-io") == 0) {
+                use_io = true;
+            }
             else
             {
                 handleInvalidArg();
@@ -498,7 +554,7 @@ int main(int argc, char *argv[]) {
         for (const auto &job : testJobs)
         {
             TestResult result;
-            runTest(fileName, table, file_size, job.compression, job.encoding, job.compressionLevel, num_rounds, result);
+            runTest(fileName, table, file_size, job.compression, job.encoding, job.compressionLevel, num_rounds, use_io, result);
             print_result(result);
         }
     }
