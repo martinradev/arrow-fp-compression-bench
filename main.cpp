@@ -309,7 +309,7 @@ void printHelp()
     std::cout << "  " << "CODEC must be one of the following:" << std::endl;
     std::cout << "   " << "zstd, gzip, snappy, lz4, zfp, uncompressed" << std::endl;
     std::cout << "  " << "ENCODING must be one of the following:" << std::endl;
-    std::cout << "   " << "plain, dictionary, split" << std::endl;
+    std::cout << "   " << "plain, dictionary, byte_stream_split" << std::endl;
     std::cout << "  " << "COMPRESSION_LEVEL depends on the codec being used." << std::endl;
     std::cout << "  " << "Pass -1 if you want to use the default compression level." << std::endl;
     std::cout << std::endl;
@@ -372,7 +372,7 @@ parquet::Encoding::type GetEncodingTypeFromString(const char *encodingName)
     {
         return parquet::Encoding::type::RLE_DICTIONARY;
     }
-    else if (strcmp(encodingName, "split") == 0)
+    else if (strcmp(encodingName, "byte_stream_split") == 0)
     {
         return parquet::Encoding::type::BYTE_STREAM_SPLIT;
     }
