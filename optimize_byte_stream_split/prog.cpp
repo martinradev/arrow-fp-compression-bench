@@ -338,6 +338,9 @@ void encode_simple_no_simd(const T *input_data, size_t num_elements, uint8_t *ou
     }
 }
 
+template<typename T>
+void decode_simple(const T *input_data, size_t num_elements, uint8_t *output_data) __attribute__((noinline));
+
 // The compiler actually produces very inefficient simd code for double-precision type.
 template<typename T>
 void decode_simple(const T *input_data, size_t num_elements, uint8_t *output_data)
@@ -354,7 +357,7 @@ void decode_simple(const T *input_data, size_t num_elements, uint8_t *output_dat
 }
 
 template<typename T>
-void decode_simple_no_simd(const T *input_data, size_t num_elements, uint8_t *output_data) __attribute__ ((__target__ ("no-sse")));
+void decode_simple_no_simd(const T *input_data, size_t num_elements, uint8_t *output_data) __attribute__ ((__target__ ("no-sse"), noinline));
 
 template<typename T>
 void decode_simple_no_simd(const T *input_data, size_t num_elements, uint8_t *output_data)
@@ -441,7 +444,7 @@ void test_decode() {
 
 void benchmark_encode_float() {
     printf("Benchmark float\n");
-    const size_t buf_size = 1024UL * 1024UL * 32UL;
+    const size_t buf_size = 1024UL * 1024UL * 1UL;
     uint8_t *buf = (uint8_t*)malloc(buf_size);
     uint8_t *output_buf = (uint8_t*)malloc(buf_size);
     for (size_t i = 0; i < buf_size; ++i) {
@@ -449,7 +452,7 @@ void benchmark_encode_float() {
         output_buf[i] = 0;
     }
 
-    const size_t cnt = 128;
+    const size_t cnt = 1024 * 16;
     double total = 0;
     const size_t num_cases = 8;
     double res[num_cases];
@@ -457,8 +460,8 @@ void benchmark_encode_float() {
         total = 0;
         for (size_t i = 0; i < cnt; ++i) {
             double t1,t2;
-            flush_buf(buf, buf_size);
-            flush_buf(output_buf, buf_size);
+            //flush_buf(buf, buf_size);
+            //flush_buf(output_buf, buf_size);
             
             t1 = gettime();
             switch(k) {
@@ -510,7 +513,7 @@ void benchmark_encode_float() {
 
 void benchmark_encode_double() {
     printf("Benchmark double\n");
-    const size_t buf_size = 1024UL * 1024UL * 32UL;
+    const size_t buf_size = 1024UL * 1024UL * 64UL;
     uint8_t *buf = (uint8_t*)malloc(buf_size);
     uint8_t *output_buf = (uint8_t*)malloc(buf_size);
     for (size_t i = 0; i < buf_size; ++i) {
@@ -526,8 +529,8 @@ void benchmark_encode_double() {
         total = 0;
         for (size_t i = 0; i < cnt; ++i) {
             double t1,t2;
-            flush_buf(buf, buf_size);
-            flush_buf(output_buf, buf_size);
+            //flush_buf(buf, buf_size);
+            //flush_buf(output_buf, buf_size);
             
             t1 = gettime();
             switch(k) {
@@ -579,9 +582,9 @@ void benchmark_decode() {
 }
 
 int main() {
-    test_encode();
-    test_decode();
+    //test_encode();
+    //test_decode();
     //benchmark_encode_float();
-    //benchmark_encode_double();
+    benchmark_encode_double();
     return 0;
 }
