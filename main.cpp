@@ -206,7 +206,7 @@ void runTest(const std::string &fileName,
             double t2 = gettime();
             totalTime += (t2-t1);
             if (!status.ok()) {
-                std::cerr << "Failed to write parquet" << status.message() << std::endl;
+                std::cerr << "Failed to write parquet: " << status.message() << std::endl;
             }
 
             std::unique_ptr<parquet::arrow::FileReader> reader;
