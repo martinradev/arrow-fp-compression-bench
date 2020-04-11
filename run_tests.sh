@@ -1,9 +1,13 @@
 #!/bin/sh
 
-# generate comparison at default compression level
-fp_data="$(ls ../dataset/new/*.dp) $(ls ../dataset/32bit/*.sp)"
-cases="-c uncompressed,plain,-1,32 gzip,plain,-1,32 zstd,plain,-1,32 gzip,dictionary,-1,32 zstd,dictionary,-1,32 gzip,split,-1,32 zstd,split,-1,32 zstd,split_xor,-1,32, zstd,split_component,-1,32 zstd,split_rle,-1,32 gzip,split_xor,-1,32 gzip,split_component,-1,32 gzip,split_rle,-1,32 zstd,split,1,32 zstd,split,4,32 zstd,split,7,32 zstd,split,10,32 zstd,plain,1,32 zstd,plain,4,32 zstd,plain,7,32, zstd,plain,10,32 zstd,dictionary,1,32, zstd,dictionary,4,32, zstd,dictionary,7,32 zstd,dictionary,10,32"
-./parquet_test -b $fp_data $cases
+DATASET_DIR="/home/martin/code/guided_research/dataset/final_evaluation"
+DATASET="$(ls $DATASET_DIR/64bit/*.dp) $(ls $DATASET_DIR/32bit/*.sp)"
+TESTCASES="uncompressed,plain,-1 uncompressed,dictionary,-1 zstd,byte_stream_split,-1 zstd,plain,-1 lz4,byte_stream_split,-1 lz4,plain,-1"
+NUM_RUNS=8
 
-parquet_data="$(ls ../dataset/turbo-student-data-set/operational-data/*.parquet) ../dataset/turbo-student-data-set/parquet-data-set/GT61/2018-01-01/Can_01_SPEC.parquet"
-./parquet_test -p $parquet_data $cases
+# Run memory benchmark
+./parquet_test -b $DATASET -c $TESTCASES -r $NUM_RUNS > memory_results.txt
+
+# Run IO benchmark
+# This requires sudo rights since a sysctl is performed.
+sudo ./parquet_test -b $DATASET -c $TESTCASES -r $NUM_RUNS -io > io_results.txt
