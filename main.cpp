@@ -18,6 +18,7 @@
 #include <tuple>
 #include <sys/time.h>
 #include <vector>
+#include <unistd.h>
 #include <libgen.h>
 
 namespace
@@ -85,7 +86,7 @@ auto transformRawVectorToArrowTable<float>(const std::vector<float> &data)
 
     std::shared_ptr<arrow::Schema> schema = arrow::schema(
         {arrow::field("values", arrow::float32())});
-    
+
     return arrow::Table::Make(schema, {array});
 }
 
@@ -99,7 +100,7 @@ auto transformRawVectorToArrowTable<double>(const std::vector<double> &data)
 
     std::shared_ptr<arrow::Schema> schema = arrow::schema(
         {arrow::field("values", arrow::float64())});
-    
+
     return arrow::Table::Make(schema, {array});
 }
 
@@ -107,7 +108,7 @@ template<typename T>
 auto readBinaryFile(const std::string &fname)
 {
     std::vector<T> data;
-    
+
     std::ifstream input(fname, std::ifstream::in | std::ifstream::binary);
 
     input.seekg(0, input.end);
@@ -196,13 +197,13 @@ void runTest(const std::string &fileName,
             }
             std::shared_ptr<arrow::io::FileOutputStream> file_output_stream = *result;
             arrow::Status status;
-            system("sync");
+            sync();
             double t1 = gettime();
             status = parquet::arrow::WriteTable(*table, ::arrow::default_memory_pool(),
                file_output_stream, table->num_rows(), props);
                 file_output_stream->Flush();
                 file_output_stream->Close();
-            system("sync"); // this will add some latency, yes.
+            sync();
             double t2 = gettime();
             totalTime += (t2-t1);
             if (!status.ok()) {
