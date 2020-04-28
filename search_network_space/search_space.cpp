@@ -32,6 +32,9 @@ enum Command {
     avx2_unpack64_skip,
     avx2_unpack128_next,
     avx2_unpack128_skip,
+    avx2_permute64_self,
+    avx2_shuffle32_self,
+
     cmd_end_avx2
 };
 
@@ -158,6 +161,16 @@ State<SIZE, __m256i> apply_command(const State<SIZE, __m256i> &state, Command cm
                 do_avx2(state.v[i], state.v[i + SIZE / 2], cmd, new_state.v[i * 2], new_state.v[i * 2 + 1]);
             }
             break;
+        case avx2_permute64_self:
+            for (size_t i = 0; i < SIZE; i += 1) {
+                new_state.v[i] = _mm256_permute4x64_epi64(state.v[i], (3 << 6) | (1 << 4) | (2 << 2) | (0 << 0));
+            }
+            break;
+        case avx2_shuffle32_self:
+            for (size_t i = 0; i < SIZE; i += 1) {
+                new_state.v[i] = _mm256_shuffle_epi32(state.v[i], (3 << 6) | (1 << 4) | (2 << 2) | (0 << 0));
+            }
+            break;
         default:
             assert(!"Unknown");
             break;
@@ -226,6 +239,12 @@ void print_network(const State<SIZE, VTYPE> &state) {
             case avx2_unpack128_next:
                 name = "avx2_unpack128_next";
                 break;
+            case avx2_permute64_self:
+                name = "avx2_permute64_self";
+                break;
+            case avx2_shuffle32_self:
+                name = "avx2_shufle32_self";
+                break;
             default:
                 assert(!"Unknown");
         }
@@ -235,7 +254,7 @@ void print_network(const State<SIZE, VTYPE> &state) {
 
 template<size_t SIZE, typename VTYPE>
 bool states_are_equal(const State<SIZE, VTYPE>& a, const State<SIZE, VTYPE>& b) {
-    return memcmp(&a.v[0], &b.v[0], 64) == 0;
+    return memcmp(&a.v[0], &b.v[0], SIZE * sizeof(VTYPE)) == 0;
 }
 
 template<size_t SIZE, typename VTYPE>
@@ -395,7 +414,7 @@ int main() {
             raw[i] = (uint8_t)i;
         }
         State<8, __m256i> expected_state;
-        for (size_t i = 0; i < 7; ++i) {
+        for (size_t i = 0; i < 9; ++i) {
             expected_state.cmds.push_back(cmd_end);
         }
         raw = (uint8_t*)&expected_state.v[0];
