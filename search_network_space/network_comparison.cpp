@@ -260,9 +260,8 @@ void decode_simd_double(const uint8_t *input_data, size_t num_elements, uint8_t 
     }
 }
 
-double benchmark_path(RunName name, const uint8_t *input, size_t num_bytes, uint8_t *output)
+double benchmark_path(RunName name, const uint8_t *input, size_t num_bytes, uint8_t *output, const size_t num_runs)
 {
-    const size_t num_runs = 4096UL * 2UL;
     size_t num_elements;
     switch(name) {
         case RnEncodeScalarFloat:
@@ -383,7 +382,11 @@ void test_all_encodings() {
 }
 
 void benchmark_all_encodings() {
-    const size_t num_bytes = 1024 * 1024;
+    const size_t size_MiB = 1;
+    const size_t num_bytes = size_MiB * 1024 * 1024;
+    const size_t num_runs = 4096;
+    printf("Testing %zu MiB.\n", size_MiB);
+    printf("Averaging over %zu runs.\n", num_runs);
     uint8_t *input = (uint8_t*)malloc(num_bytes);
     uint8_t *output = (uint8_t*)malloc(num_bytes);
     srand(1337);
@@ -393,7 +396,7 @@ void benchmark_all_encodings() {
     for (size_t i = RnStart; i < RnEnd; ++i) {
         RunName name = (RunName)i;
         const char *name_s = CovertRnNameToString(name);
-        double avg_gibs_per_s = benchmark_path(name, input, num_bytes, output);
+        double avg_gibs_per_s = benchmark_path(name, input, num_bytes, output, num_runs);
         printf("%s: %lf GiB/s\n", name_s, avg_gibs_per_s);
     }
     free(input);
