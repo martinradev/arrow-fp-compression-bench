@@ -387,5 +387,43 @@ int main() {
         }
     }
 
+    {
+        // Search for the best networks for double types.
+        State<8, __m256i> initial_state;
+        uint8_t *raw = (uint8_t*)&initial_state.v[0];
+        for (size_t i = 0; i < 256; ++i) {
+            raw[i] = (uint8_t)i;
+        }
+        State<8, __m256i> expected_state;
+        for (size_t i = 0; i < 7; ++i) {
+            expected_state.cmds.push_back(cmd_end);
+        }
+        raw = (uint8_t*)&expected_state.v[0];
+        for (size_t i = 0; i < 8; ++i) {
+            for (size_t j = 0; j < 32; ++j) {
+                raw[j + i * 32] = j * 8 + i;
+            }
+        }
+
+        {
+            std::cout << "Double AVX2 encode networks" << std::endl;
+            std::vector<State<8, __m256i>> best_networks;
+            traverse(initial_state, expected_state, best_networks);
+            for (size_t i = 0; i < best_networks.size(); ++i) {
+                print_network<8>(best_networks[i]);
+                std::cout << std::endl;
+            }
+        }
+        {
+            std::cout << "Double AVX2 decode networks" << std::endl;
+            std::swap(initial_state.v, expected_state.v); // Quick hack.
+            std::vector<State<8, __m256i>> best_networks;
+            traverse(initial_state, expected_state, best_networks);
+            for (size_t i = 0; i < best_networks.size(); ++i) {
+                print_network<8>(best_networks[i]);
+                std::cout << std::endl;
+            }
+        }
+    }
     return 0;
 }
