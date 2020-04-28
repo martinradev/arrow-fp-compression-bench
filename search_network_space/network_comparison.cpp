@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <emmintrin.h>
+#include <immintrin.h>
 #include <time.h>
 #include <sys/mman.h>
 
@@ -13,6 +14,9 @@
             exit(-1); \
         } \
     } while(0)
+
+#define _mm256_unpacklo_epi128(a, b) _mm256_permute2x128_si256(a, b, 2 << 4);
+#define _mm256_unpackhi_epi128(a, b) _mm256_permute2x128_si256(a, b, 1 | (3 << 4));
 
 enum RunName {
     RnStart = 0,
@@ -26,8 +30,12 @@ enum RunName {
     RnDecodeSimdFloat,
     RnEncodeSimdDouble,
     RnDecodeSimdDouble,
+    RnEncodeAVX2Float,
+    RnDecodeAVX2Float,
+    RnEncodeAVX2Double,
+    RnDecodeAVX2Double,
+    RnEnd,
 
-    RnEnd
 };
 
 const char* CovertRnNameToString(RunName name) {
@@ -50,6 +58,14 @@ const char* CovertRnNameToString(RunName name) {
             return "encode_simd_double";
         case RnDecodeSimdDouble:
             return "decode_simd_double";
+        case RnEncodeAVX2Float:
+            return "encode_avx2_float";
+        case RnDecodeAVX2Float:
+            return "decode_avx2_float";
+        case RnEncodeAVX2Double:
+            return "encode_avx2_double";
+        case RnDecodeAVX2Double:
+            return "decode_avx2_double";
         default:
             ASSERT(!"Unknown name");
             return NULL;
@@ -260,6 +276,202 @@ void decode_simd_double(const uint8_t *input_data, size_t num_elements, uint8_t 
     }
 }
 
+void encode_avx2_float(const uint8_t *input_data, size_t num_elements, uint8_t *output_data) {
+    // We will not handle the special case here and assume size is divisble 32 * 4.
+    __m256i s[4];
+    __m256i p[4];
+    for (size_t i = 0; i < num_elements * 4UL; i += 128UL) {
+        s[0] = _mm256_loadu_si256((__m256i*)(input_data + i));
+        s[1] = _mm256_loadu_si256((__m256i*)(input_data + i + 32UL));
+        s[2] = _mm256_loadu_si256((__m256i*)(input_data + i + 64UL));
+        s[3] = _mm256_loadu_si256((__m256i*)(input_data + i + 96UL));
+
+        p[0] = _mm256_unpacklo_epi8(s[0], s[1]);
+        p[1] = _mm256_unpackhi_epi8(s[0], s[1]);
+        p[2] = _mm256_unpacklo_epi8(s[2], s[3]);
+        p[3] = _mm256_unpackhi_epi8(s[2], s[3]);
+
+        s[0] = _mm256_unpacklo_epi8(p[0], p[1]);
+        s[1] = _mm256_unpackhi_epi8(p[0], p[1]);
+        s[2] = _mm256_unpacklo_epi8(p[2], p[3]);
+        s[3] = _mm256_unpackhi_epi8(p[2], p[3]);
+
+        p[0] = _mm256_unpacklo_epi8(s[0], s[1]);
+        p[1] = _mm256_unpackhi_epi8(s[0], s[1]);
+        p[2] = _mm256_unpacklo_epi8(s[2], s[3]);
+        p[3] = _mm256_unpackhi_epi8(s[2], s[3]);
+
+        s[0] = _mm256_unpacklo_epi128(p[0], p[2]);
+        s[1] = _mm256_unpackhi_epi128(p[0], p[2]);
+        s[2] = _mm256_unpacklo_epi128(p[1], p[3]);
+        s[3] = _mm256_unpackhi_epi128(p[1], p[3]);
+
+        p[0] = _mm256_unpacklo_epi32(s[0], s[1]);
+        p[1] = _mm256_unpackhi_epi32(s[0], s[1]);
+        p[2] = _mm256_unpacklo_epi32(s[2], s[3]);
+        p[3] = _mm256_unpackhi_epi32(s[2], s[3]);
+
+        size_t off = i / 4UL;
+        _mm256_storeu_si256((__m256i*)(output_data + off), p[0]);
+        _mm256_storeu_si256((__m256i*)(output_data + num_elements + off), p[1]);
+        _mm256_storeu_si256((__m256i*)(output_data + num_elements*2 + off), p[2]);
+        _mm256_storeu_si256((__m256i*)(output_data + num_elements*3 + off), p[3]);
+    }
+}
+
+void decode_avx2_float(const uint8_t *input_data, size_t num_elements, uint8_t *output_data) {
+    __m256i s[4];
+    __m256i p[4];
+    for (size_t i = 0; i < num_elements; i += 32UL) {
+        s[0] = _mm256_loadu_si256((__m256i*)(input_data + i));
+        s[1] = _mm256_loadu_si256((__m256i*)(input_data + num_elements + i));
+        s[2] = _mm256_loadu_si256((__m256i*)(input_data + num_elements * 2UL + i));
+        s[3] = _mm256_loadu_si256((__m256i*)(input_data + num_elements * 3UL + i));
+
+        p[0] = _mm256_unpacklo_epi8(s[0], s[1]);
+        p[1] = _mm256_unpackhi_epi8(s[0], s[1]);
+        p[2] = _mm256_unpacklo_epi8(s[2], s[3]);
+        p[3] = _mm256_unpackhi_epi8(s[2], s[3]);
+
+        s[0] = _mm256_unpacklo_epi64(p[0], p[1]);
+        s[1] = _mm256_unpackhi_epi64(p[0], p[1]);
+        s[2] = _mm256_unpacklo_epi64(p[2], p[3]);
+        s[3] = _mm256_unpackhi_epi64(p[2], p[3]);
+
+        p[0] = _mm256_unpacklo_epi128(s[0], s[1]);
+        p[1] = _mm256_unpackhi_epi128(s[0], s[1]);
+        p[2] = _mm256_unpacklo_epi128(s[2], s[3]);
+        p[3] = _mm256_unpackhi_epi128(s[2], s[3]);
+
+        s[0] = _mm256_unpacklo_epi16(p[0], p[2]);
+        s[1] = _mm256_unpackhi_epi16(p[0], p[2]);
+        s[2] = _mm256_unpacklo_epi16(p[1], p[3]);
+        s[3] = _mm256_unpackhi_epi16(p[1], p[3]);
+
+        size_t off = i * 4UL;
+        _mm256_storeu_si256((__m256i*)(output_data + off), s[0]);
+        _mm256_storeu_si256((__m256i*)(output_data + off + 32UL), s[1]);
+        _mm256_storeu_si256((__m256i*)(output_data + off + 64UL), s[2]);
+        _mm256_storeu_si256((__m256i*)(output_data + off + 96UL), s[3]);
+    }
+}
+
+void encode_avx2_double(const uint8_t *input_data, size_t num_elements, uint8_t *output_data) {
+    // We will not handle the special case here and assume size is divisble 32 * 8.
+    __m256i s[8];
+    __m256i p[8];
+    for (size_t i = 0; i < num_elements * 8UL; i += 256UL) {
+        s[0] = _mm256_loadu_si256((__m256i*)(input_data + i));
+        s[1] = _mm256_loadu_si256((__m256i*)(input_data + i + 32UL));
+        s[2] = _mm256_loadu_si256((__m256i*)(input_data + i + 64UL));
+        s[3] = _mm256_loadu_si256((__m256i*)(input_data + i + 96UL));
+        s[4] = _mm256_loadu_si256((__m256i*)(input_data + i + 128UL));
+        s[5] = _mm256_loadu_si256((__m256i*)(input_data + i + 160UL));
+        s[6] = _mm256_loadu_si256((__m256i*)(input_data + i + 192UL));
+        s[7] = _mm256_loadu_si256((__m256i*)(input_data + i + 224UL));
+
+        p[0] = _mm256_unpacklo_epi128(s[0], s[4]);
+        p[1] = _mm256_unpackhi_epi128(s[0], s[4]);
+        p[2] = _mm256_unpacklo_epi128(s[1], s[5]);
+        p[3] = _mm256_unpackhi_epi128(s[1], s[5]);
+        p[4] = _mm256_unpacklo_epi128(s[2], s[6]);
+        p[5] = _mm256_unpackhi_epi128(s[2], s[6]);
+        p[6] = _mm256_unpacklo_epi128(s[3], s[7]);
+        p[7] = _mm256_unpackhi_epi128(s[3], s[7]);
+
+        s[0] = _mm256_unpacklo_epi8(p[0], p[4]);
+        s[1] = _mm256_unpackhi_epi8(p[0], p[4]);
+        s[2] = _mm256_unpacklo_epi8(p[1], p[5]);
+        s[3] = _mm256_unpackhi_epi8(p[1], p[5]);
+        s[4] = _mm256_unpacklo_epi8(p[2], p[6]);
+        s[5] = _mm256_unpackhi_epi8(p[2], p[6]);
+        s[6] = _mm256_unpacklo_epi8(p[3], p[7]);
+        s[7] = _mm256_unpackhi_epi8(p[3], p[7]);
+
+        p[0] = _mm256_unpacklo_epi8(s[0], s[4]);
+        p[1] = _mm256_unpackhi_epi8(s[0], s[4]);
+        p[2] = _mm256_unpacklo_epi8(s[1], s[5]);
+        p[3] = _mm256_unpackhi_epi8(s[1], s[5]);
+        p[4] = _mm256_unpacklo_epi8(s[2], s[6]);
+        p[5] = _mm256_unpackhi_epi8(s[2], s[6]);
+        p[6] = _mm256_unpacklo_epi8(s[3], s[7]);
+        p[7] = _mm256_unpackhi_epi8(s[3], s[7]);
+
+        s[0] = _mm256_unpacklo_epi8(p[0], p[4]);
+        s[1] = _mm256_unpackhi_epi8(p[0], p[4]);
+        s[2] = _mm256_unpacklo_epi8(p[1], p[5]);
+        s[3] = _mm256_unpackhi_epi8(p[1], p[5]);
+        s[4] = _mm256_unpacklo_epi8(p[2], p[6]);
+        s[5] = _mm256_unpackhi_epi8(p[2], p[6]);
+        s[6] = _mm256_unpacklo_epi8(p[3], p[7]);
+        s[7] = _mm256_unpackhi_epi8(p[3], p[7]);
+
+        p[0] = _mm256_unpacklo_epi8(s[0], s[4]);
+        p[1] = _mm256_unpackhi_epi8(s[0], s[4]);
+        p[2] = _mm256_unpacklo_epi8(s[1], s[5]);
+        p[3] = _mm256_unpackhi_epi8(s[1], s[5]);
+        p[4] = _mm256_unpacklo_epi8(s[2], s[6]);
+        p[5] = _mm256_unpackhi_epi8(s[2], s[6]);
+        p[6] = _mm256_unpacklo_epi8(s[3], s[7]);
+        p[7] = _mm256_unpackhi_epi8(s[3], s[7]);
+
+        size_t off = i / 8UL;
+        _mm256_storeu_si256((__m256i*)(output_data + off), p[0]);
+        _mm256_storeu_si256((__m256i*)(output_data + num_elements + off), p[1]);
+        _mm256_storeu_si256((__m256i*)(output_data + num_elements*2 + off), p[2]);
+        _mm256_storeu_si256((__m256i*)(output_data + num_elements*3 + off), p[3]);
+        _mm256_storeu_si256((__m256i*)(output_data + num_elements*4 + off), p[4]);
+        _mm256_storeu_si256((__m256i*)(output_data + num_elements*5 + off), p[5]);
+        _mm256_storeu_si256((__m256i*)(output_data + num_elements*6 + off), p[6]);
+        _mm256_storeu_si256((__m256i*)(output_data + num_elements*7 + off), p[7]);
+    }
+}
+
+void decode_avx2_double(const uint8_t *input_data, size_t num_elements, uint8_t *output_data) {
+    __m256i s[8];
+    __m256i p[8];
+    const int permute_mask = (3U << 6) | (1U << 4) | (2U << 2) | (0U << 0);
+    for (size_t i = 0; i < num_elements; i += 32UL) {
+        s[0] = _mm256_loadu_si256((__m256i*)(input_data + i));
+        s[1] = _mm256_loadu_si256((__m256i*)(input_data + num_elements + i));
+        s[2] = _mm256_loadu_si256((__m256i*)(input_data + num_elements * 2UL + i));
+        s[3] = _mm256_loadu_si256((__m256i*)(input_data + num_elements * 3UL + i));
+        s[4] = _mm256_loadu_si256((__m256i*)(input_data + num_elements * 4UL + i));
+        s[5] = _mm256_loadu_si256((__m256i*)(input_data + num_elements * 5UL + i));
+        s[6] = _mm256_loadu_si256((__m256i*)(input_data + num_elements * 6UL + i));
+        s[7] = _mm256_loadu_si256((__m256i*)(input_data + num_elements * 7UL + i));
+
+        for (int i = 0; i < 4; ++i) {
+            p[2*i] = _mm256_unpacklo_epi128(s[i], s[i+4]);
+            p[2*i+1] = _mm256_unpackhi_epi128(s[i], s[i+4]);
+        }
+        for (int i = 0; i < 4; ++i) {
+            s[2*i] = _mm256_unpacklo_epi8(p[i], p[i+4]);
+            s[2*i+1] = _mm256_unpackhi_epi8(p[i], p[i+4]);
+        }
+        for (int i = 0; i < 4; ++i) {
+            p[2*i] = _mm256_unpacklo_epi8(s[i], s[i+4]);
+            p[2*i+1] = _mm256_unpackhi_epi8(s[i], s[i+4]);
+        }
+        for (int i = 0; i < 8; ++i) {
+            s[i] = _mm256_permute4x64_epi64(p[i], permute_mask);
+        }
+        for (int i = 0; i < 8; ++i) {
+            p[i] = _mm256_shuffle_epi32(s[i], permute_mask);
+        }
+
+        size_t off = i * 8UL;
+        _mm256_storeu_si256((__m256i*)(output_data + off), p[0]);
+        _mm256_storeu_si256((__m256i*)(output_data + off + 32UL), p[1]);
+        _mm256_storeu_si256((__m256i*)(output_data + off + 64UL), p[2]);
+        _mm256_storeu_si256((__m256i*)(output_data + off + 96UL), p[3]);
+        _mm256_storeu_si256((__m256i*)(output_data + off + 128UL), p[4]);
+        _mm256_storeu_si256((__m256i*)(output_data + off + 160UL), p[5]);
+        _mm256_storeu_si256((__m256i*)(output_data + off + 192UL), p[6]);
+        _mm256_storeu_si256((__m256i*)(output_data + off + 224UL), p[7]);
+    }
+}
+
 double benchmark_path(RunName name, const uint8_t *input, size_t num_bytes, uint8_t *output, const size_t num_runs)
 {
     size_t num_elements;
@@ -268,12 +480,16 @@ double benchmark_path(RunName name, const uint8_t *input, size_t num_bytes, uint
         case RnDecodeScalarFloat:
         case RnEncodeSimdFloat:
         case RnDecodeSimdFloat:
+        case RnEncodeAVX2Float:
+        case RnDecodeAVX2Float:
             num_elements = num_bytes / 4UL;
             break;
         case RnEncodeScalarDouble:
         case RnDecodeScalarDouble:
         case RnEncodeSimdDouble:
         case RnDecodeSimdDouble:
+        case RnEncodeAVX2Double:
+        case RnDecodeAVX2Double:
             num_elements = num_bytes / 8UL;
             break;
         case RnMemcpy:
@@ -316,6 +532,18 @@ double benchmark_path(RunName name, const uint8_t *input, size_t num_bytes, uint
                 break;
             case RnDecodeSimdDouble:
                 decode_simd_double(input, num_elements, output);
+                break;
+            case RnEncodeAVX2Float:
+                encode_avx2_float(input, num_elements, output);
+                break;
+            case RnDecodeAVX2Float:
+                decode_avx2_float(input, num_elements, output);
+                break;
+            case RnEncodeAVX2Double:
+                encode_avx2_double(input, num_elements, output);
+                break;
+            case RnDecodeAVX2Double:
+                decode_avx2_double(input, num_elements, output);
                 break;
             default:
                 ASSERT(!"Unknown name");
@@ -373,6 +601,29 @@ void test_all_encodings() {
     decode_simd_double(expected_output_double, num_elements_double, output);
     if (memcmp(input, output, num_bytes)) {
         ASSERT(!"decode_simd_double failed");
+    }
+
+    // Check that encode_avx2_float and decode_avx2_float work correctly.
+    encode_avx2_float(input, num_elements_float, output);
+    if (memcmp(expected_output_float, output, num_bytes)) {
+        ASSERT(!"encode_avx2_float failed");
+    }
+    decode_avx2_float(expected_output_float, num_elements_float, output);
+    if (memcmp(input, output, num_bytes)) {
+        ASSERT(!"decode_avx2_float failed");
+    }
+
+    // Check that encode_avx2_double and decode_avx2_double work correctly.
+    encode_avx2_double(input, num_elements_double, output);
+    if (memcmp(expected_output_double, output, num_bytes)) {
+        ASSERT(!"encode_avx2_double failed");
+    }
+    decode_avx2_double(expected_output_double, num_elements_double, output);
+    if (memcmp(input, output, num_bytes)) {
+        for (size_t i = 0; i < 256; ++i) {
+            printf("%u\n", output[i]);
+        }
+        ASSERT(!"decode_avx2_double failed");
     }
 
     free(input);
